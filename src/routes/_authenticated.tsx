@@ -9,6 +9,7 @@ import { PlayerProvider, usePlayer } from "@/lib/player-context";
 import { LocalPlaylistProvider } from "@/lib/playlist-context";
 import { YouTubePlayer } from "@/components/YouTubePlayer";
 import { LikeButton } from "@/components/LikeButton";
+import { AddButton } from "@/components/AddButton";
 
 export const Route = createFileRoute("/_authenticated")({
   component: AuthLayout,
