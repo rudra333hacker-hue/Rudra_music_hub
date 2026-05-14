@@ -1,8 +1,12 @@
 import { createFileRoute, Outlet, Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { Home, Library, LogOut, Music2, SkipBack, SkipForward, Headphones, Video } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Home, Library, LogOut, SkipBack, SkipForward, Headphones, Video,
+  Play, Pause, Repeat, Repeat1, ChevronDown
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { PlayerProvider, usePlayer } from "@/lib/player-context";
+import { LocalPlaylistProvider } from "@/lib/playlist-context";
 import { YouTubePlayer } from "@/components/YouTubePlayer";
 import { LikeButton } from "@/components/LikeButton";
 
@@ -25,9 +29,11 @@ function AuthLayout() {
   }
 
   return (
-    <PlayerProvider>
-      <Shell user={user} signOut={signOut} />
-    </PlayerProvider>
+    <LocalPlaylistProvider>
+      <PlayerProvider>
+        <Shell user={user} signOut={signOut} />
+      </PlayerProvider>
+    </LocalPlaylistProvider>
   );
 }
 
@@ -102,13 +108,14 @@ function Shell({ user, signOut }: { user: any; signOut: () => void }) {
   );
 }
 
-import { useState } from "react";
-import { Play, Pause, Repeat, Repeat1, ChevronDown } from "lucide-react";
+/* ─── Helpers ─── */
 
 function fmtTime(s: number) {
   if (!s || isNaN(s)) return "0:00";
   return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 }
+
+/* ─── Now Playing Bar + Full-Screen Player ─── */
 
 function NowPlayingBar() {
   const {
@@ -121,13 +128,11 @@ function NowPlayingBar() {
 
   if (!current) return null;
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    seekTo(Number(e.target.value));
-  };
+  const pct = duration ? (currentTime / duration) * 100 : 0;
 
   return (
     <>
-      {/* Single YouTube player — always mounted, handles both audio & video */}
+      {/* ── Single YouTube player ── always mounted ── */}
       <div className={mode === "video" && !fullScreen ? "fixed bottom-28 md:bottom-20 inset-x-0 flex justify-center z-30 px-4" : "sr-only"}>
         <div className="w-full max-w-md">
           <YouTubePlayer
@@ -142,25 +147,21 @@ function NowPlayingBar() {
         </div>
       </div>
 
+      {/* ── Mini bar ── */}
       <div className="fixed bottom-12 md:bottom-0 inset-x-0 bg-card/95 backdrop-blur border-t border-border z-30">
-        {/* Progress bar at very top of player */}
+        {/* Thin progress bar */}
         <div
           className="w-full h-1 bg-secondary cursor-pointer group"
           onClick={(e) => {
-            e.stopPropagation();
             const rect = e.currentTarget.getBoundingClientRect();
-            const pct = (e.clientX - rect.left) / rect.width;
-            seekTo(pct * (duration || 0));
+            seekTo(((e.clientX - rect.left) / rect.width) * (duration || 0));
           }}
         >
-          <div
-            className="h-full bg-primary transition-all group-hover:bg-primary/80"
-            style={{ width: `${duration ? (currentTime / duration) * 100 : 0}%` }}
-          />
+          <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
         </div>
 
         <div className="max-w-7xl mx-auto px-3 py-2 flex items-center gap-2">
-          {/* Album art — tapping opens full screen */}
+          {/* Thumbnail — opens full screen */}
           <img
             src={current.thumbnail}
             alt=""
@@ -168,50 +169,51 @@ function NowPlayingBar() {
             onClick={() => setFullScreen(true)}
           />
 
-          {/* Title — tapping opens full screen */}
+          {/* Title — opens full screen */}
           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setFullScreen(true)}>
             <div className="text-sm font-semibold truncate leading-tight">{current.title}</div>
             <div className="text-xs text-muted-foreground truncate">{current.author}</div>
           </div>
 
-          {/* Controls — always visible, stop propagation to avoid opening full screen */}
-          <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-            {/* Repeat toggle — always visible */}
-            <button
-              onClick={() => setRepeatMode(repeatMode === "off" ? "all" : repeatMode === "all" ? "one" : "off")}
-              className={`p-2 rounded-full transition ${repeatMode !== "off" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
-              aria-label={`Repeat: ${repeatMode}`}
-              title={`Repeat: ${repeatMode}`}
-            >
-              {repeatMode === "one" ? <Repeat1 size={16} /> : <Repeat size={16} />}
-            </button>
+            {/* Controls */}
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              {/* Repeat */}
+              <button
+                onClick={() => setRepeatMode(repeatMode === "off" ? "all" : repeatMode === "all" ? "one" : "off")}
+                className={`p-2 rounded-full transition hidden sm:block ${repeatMode !== "off" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+                title={`Repeat: ${repeatMode}`}
+              >
+                {repeatMode === "one" ? <Repeat1 size={16} /> : <Repeat size={16} />}
+              </button>
 
-            {/* Prev */}
-            <button onClick={prev} className="p-2 text-muted-foreground hover:text-foreground transition" aria-label="Previous">
-              <SkipBack size={18} />
-            </button>
+              {/* Prev */}
+              <button onClick={prev} className="p-2 text-muted-foreground hover:text-foreground hidden sm:block">
+                <SkipBack size={18} />
+              </button>
 
-            {/* Play / Pause — primary CTA */}
-            <button
-              onClick={togglePlay}
-              className="w-9 h-9 flex items-center justify-center bg-primary text-primary-foreground rounded-full hover:scale-105 active:scale-95 transition"
-              aria-label={isPlaying ? "Pause" : "Play"}
-            >
-              {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-            </button>
+              {/* Play/Pause */}
+              <button
+                onClick={togglePlay}
+                className="w-9 h-9 flex items-center justify-center bg-primary text-primary-foreground rounded-full hover:scale-105 active:scale-95 transition mx-1"
+              >
+                {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" className="ml-0.5" />}
+              </button>
 
-            {/* Next */}
-            <button onClick={next} className="p-2 text-muted-foreground hover:text-foreground transition" aria-label="Next">
-              <SkipForward size={18} />
-            </button>
+              {/* Next */}
+              <button onClick={next} className="p-2 text-muted-foreground hover:text-foreground">
+                <SkipForward size={18} />
+              </button>
 
-            {/* Like */}
-            <LikeButton track={current} />
+              {/* Add & Like */}
+              <div className="flex items-center ml-1">
+                <AddButton track={current} />
+                <LikeButton track={current} />
+              </div>
+            </div>
           </div>
-        </div>
       </div>
 
-      {/* Full Screen Player Modal */}
+      {/* ── Full Screen Player Modal ── */}
       {fullScreen && (
         <div className="fixed inset-0 z-50 bg-background flex flex-col animate-in slide-in-from-bottom-full duration-300">
           <div className="flex items-center justify-between p-4">
@@ -219,36 +221,35 @@ function NowPlayingBar() {
               <ChevronDown size={28} />
             </button>
             <div className="text-xs font-semibold tracking-widest uppercase text-muted-foreground">Now Playing</div>
-            <div className="w-10"></div>
+            <div className="w-10" />
           </div>
 
           <div className="flex-1 flex flex-col items-center justify-center p-6 max-w-md mx-auto w-full gap-8">
+            {/* Album art */}
             <div className="w-full aspect-square rounded-xl overflow-hidden shadow-2xl">
-              {mode === "video" ? (
-                <div className="w-full h-full scale-[1.35]">
-                  {/* Reuse the persistent hidden player — don't create a new one */}
-                  <div className="w-full h-full bg-black flex items-center justify-center text-xs text-muted-foreground">Video playing in bar below</div>
-                </div>
-              ) : (
-                <img src={current.thumbnail} alt="" className="w-full h-full object-cover" />
-              )}
+              <img src={current.thumbnail} alt="" className="w-full h-full object-cover" />
             </div>
 
+            {/* Song info */}
             <div className="w-full flex items-center justify-between gap-4">
               <div className="flex-1 min-w-0">
                 <h2 className="text-2xl font-bold truncate">{current.title}</h2>
                 <p className="text-lg text-muted-foreground truncate">{current.author}</p>
               </div>
-              <LikeButton track={current} />
+              <div className="flex items-center gap-2">
+                <AddButton track={current} />
+                <LikeButton track={current} />
+              </div>
             </div>
 
+            {/* Seek bar */}
             <div className="w-full space-y-2">
               <input
                 type="range"
                 min={0}
                 max={duration || 100}
                 value={currentTime || 0}
-                onChange={handleSeek}
+                onChange={(e) => seekTo(Number(e.target.value))}
                 className="w-full h-1.5 bg-secondary rounded-full appearance-none cursor-pointer accent-primary"
               />
               <div className="flex justify-between text-xs text-muted-foreground font-medium tabular-nums">
@@ -257,6 +258,7 @@ function NowPlayingBar() {
               </div>
             </div>
 
+            {/* Playback controls */}
             <div className="w-full flex items-center justify-between">
               <button
                 onClick={() => setRepeatMode(repeatMode === "off" ? "all" : repeatMode === "all" ? "one" : "off")}
@@ -277,14 +279,15 @@ function NowPlayingBar() {
                 </button>
               </div>
 
-              <div className="w-10"></div>
+              <div className="w-10" />
             </div>
 
+            {/* Audio/Video toggle */}
             <div className="flex items-center gap-1 rounded-full border border-border p-0.5 mt-4">
-              <button onClick={() => setMode("audio")} aria-label="Audio" className={`px-4 py-2 rounded-full text-sm flex items-center gap-2 ${mode === "audio" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+              <button onClick={() => setMode("audio")} className={`px-4 py-2 rounded-full text-sm flex items-center gap-2 ${mode === "audio" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
                 <Headphones size={16} /> Audio
               </button>
-              <button onClick={() => setMode("video")} aria-label="Video" className={`px-4 py-2 rounded-full text-sm flex items-center gap-2 ${mode === "video" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
+              <button onClick={() => setMode("video")} className={`px-4 py-2 rounded-full text-sm flex items-center gap-2 ${mode === "video" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
                 <Video size={16} /> Video
               </button>
             </div>
@@ -294,4 +297,3 @@ function NowPlayingBar() {
     </>
   );
 }
-

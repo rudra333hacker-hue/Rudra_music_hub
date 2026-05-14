@@ -41,7 +41,12 @@ function HomePage() {
     setMixLoading(true);
     setMixErr(null);
     try {
-      const suggestions = await getSuggestions({ data: { mode, mood: moodText } });
+      const raw = await getSuggestions({ data: { mode, mood: moodText } });
+      const suggestions = Array.isArray(raw) ? raw : [];
+      if (!suggestions.length) {
+        setMixErr("No suggestions returned. Try again.");
+        return;
+      }
       // Resolve each to a real Track via search
       const resolved = await Promise.all(
         suggestions.slice(0, 12).map(async (s) => {

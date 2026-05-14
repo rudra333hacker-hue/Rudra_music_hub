@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { attachSupabaseAuth } from "@/integrations/supabase/client-middleware";
 import { Track } from "./search";
 
 export type Playlist = {
@@ -17,7 +18,7 @@ export type PlaylistTrack = Track & {
 };
 
 export const getPlaylistsFn = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const { data, error } = await supabase
@@ -31,7 +32,7 @@ export const getPlaylistsFn = createServerFn({ method: "GET" })
   });
 
 export const createPlaylistFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((data: any) => ({ name: String(data?.name ?? "My Playlist") }))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -46,7 +47,7 @@ export const createPlaylistFn = createServerFn({ method: "POST" })
   });
 
 export const deletePlaylistFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((data: any) => ({ id: String(data?.id) }))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -60,7 +61,7 @@ export const deletePlaylistFn = createServerFn({ method: "POST" })
   });
 
 export const getPlaylistTracksFn = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((data: any) => ({ playlist_id: String(data?.playlist_id) }))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -86,7 +87,7 @@ export const getPlaylistTracksFn = createServerFn({ method: "GET" })
   });
 
 export const addTrackToPlaylistFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((data: any) => ({
     playlist_id: String(data?.playlist_id),
     track: data?.track as Track,
@@ -124,7 +125,7 @@ export const addTrackToPlaylistFn = createServerFn({ method: "POST" })
   });
 
 export const removeTrackFromPlaylistFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((data: any) => ({
     playlist_track_id: String(data?.playlist_track_id),
   }))
@@ -140,7 +141,7 @@ export const removeTrackFromPlaylistFn = createServerFn({ method: "POST" })
   });
 
 export const updatePlaylistNameFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((data: any) => ({ id: String(data?.id), name: String(data?.name) }))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
@@ -154,7 +155,7 @@ export const updatePlaylistNameFn = createServerFn({ method: "POST" })
   });
 
 export const reorderPlaylistFn = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([attachSupabaseAuth, requireSupabaseAuth])
   .inputValidator((data: any) => ({
     playlist_id: String(data?.playlist_id),
     updates: data?.updates as { id: string; position: number }[],

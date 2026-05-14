@@ -28,6 +28,8 @@ type PlayerCtx = {
 
 const Ctx = createContext<PlayerCtx | null>(null);
 
+const SILENT_WAV = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const [current, setCurrent] = useState<Track | null>(null);
   const [queue, setQueue] = useState<Track[]>([]);
@@ -38,20 +40,44 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [seekRequest, setSeekRequest] = useState<number | null>(null);
   const historyRef = useRef<Track[]>([]);
+  const silentRef = useRef<HTMLAudioElement>(null);
 
-  const togglePlay = useCallback(() => setIsPlaying((p) => !p), []);
+  // Synchronously play silent audio to unlock background JS thread on iOS
+  const unlockAudio = useCallback(() => {
+    if (silentRef.current) {
+      silentRef.current.play().catch(() => {});
+    }
+  }, []);
+
+  const pauseUnlock = useCallback(() => {
+    if (silentRef.current) {
+      silentRef.current.pause();
+    }
+  }, []);
+
+  const togglePlay = useCallback(() => {
+    setIsPlaying((p) => {
+      const nextState = !p;
+      if (nextState) unlockAudio();
+      else pauseUnlock();
+      return nextState;
+    });
+  }, [unlockAudio, pauseUnlock]);
+
   const seekTo = useCallback((n: number) => setSeekRequest(n), []);
 
   const play = useCallback((track: Track, q: Track[] = []) => {
+    unlockAudio();
     if (current) historyRef.current.push(current);
     setCurrent(track);
     setQueue(q);
     setIsPlaying(true);
     setCurrentTime(0);
     recordPlay(track).catch(() => {});
-  }, [current]);
+  }, [current, unlockAudio]);
 
   const next = useCallback(() => {
+    unlockAudio();
     if (repeatMode === "one" && current) {
       setSeekRequest(0);
       setIsPlaying(true);
@@ -70,6 +96,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       }
       setCurrent(null);
       setIsPlaying(false);
+      pauseUnlock();
       return;
     }
     const [n, ...rest] = queue;
@@ -79,9 +106,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setIsPlaying(true);
     setCurrentTime(0);
     recordPlay(n).catch(() => {});
-  }, [queue, current, repeatMode]);
+  }, [queue, current, repeatMode, unlockAudio, pauseUnlock]);
 
   const prev = useCallback(() => {
+    unlockAudio();
     if (currentTime > 3) {
       setSeekRequest(0);
       return;
@@ -92,9 +120,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrent(last);
     setIsPlaying(true);
     setCurrentTime(0);
-  }, [current, currentTime]);
+  }, [current, currentTime, unlockAudio]);
 
-  // Integrate with OS-level media controls (lock screen, earbuds, notification controls).
   useEffect(() => {
     if (typeof navigator === "undefined") return;
     if (!navigator.mediaSession) return;
@@ -115,8 +142,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       });
 
       navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-      navigator.mediaSession.setActionHandler("play", () => setIsPlaying(true));
-      navigator.mediaSession.setActionHandler("pause", () => setIsPlaying(false));
+      // Media session actions should ALSO trigger the audio unlock
+      navigator.mediaSession.setActionHandler("play", () => { unlockAudio(); setIsPlaying(true); });
+      navigator.mediaSession.setActionHandler("pause", () => { pauseUnlock(); setIsPlaying(false); });
       navigator.mediaSession.setActionHandler("nexttrack", () => next());
       navigator.mediaSession.setActionHandler("previoustrack", () => prev());
       navigator.mediaSession.setActionHandler("seekto", (d) => {
@@ -125,7 +153,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
-  }, [current, isPlaying, next, prev, seekTo]);
+  }, [current, isPlaying, next, prev, seekTo, unlockAudio, pauseUnlock]);
 
   const value: PlayerCtx = {
     current, queue, mode, setMode, play, next, prev,
@@ -135,7 +163,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     seekRequest, seekTo
   };
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={value}>
+      <audio ref={silentRef} src={SILENT_WAV} loop playsInline className="hidden pointer-events-none" />
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function usePlayer() {

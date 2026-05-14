@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, X, ListMusic, Check } from "lucide-react";
-import { useServerFn } from "@tanstack/react-start";
-import { getPlaylistsFn, addTrackToPlaylistFn, type Playlist } from "@/lib/playlists.functions";
+import { usePlaylists } from "@/lib/playlist-context";
 import type { Track } from "@/lib/search";
 
 type Props = {
@@ -11,39 +10,30 @@ type Props = {
 };
 
 export function AddToPlaylistModal({ track, isOpen, onClose }: Props) {
-  const getPlaylists = useServerFn(getPlaylistsFn);
-  const addTrack = useServerFn(addTrackToPlaylistFn);
+  const { playlists, loading, addTrack } = usePlaylists();
 
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [loading, setLoading] = useState(true);
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState("");
 
   useEffect(() => {
-    if (isOpen) {
-      setLoading(true);
-      getPlaylists()
-        .then(setPlaylists)
-        .catch(() => {})
-        .finally(() => setLoading(false));
-    } else {
+    if (!isOpen) {
       setSuccessMsg("");
     }
-  }, [isOpen, getPlaylists]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleAdd = async (playlistId: string) => {
     setAddingTo(playlistId);
     try {
-      await addTrack({ data: { playlist_id: playlistId, track } });
+      await addTrack(playlistId, track);
       setSuccessMsg("Added to playlist!");
       setTimeout(() => {
         setSuccessMsg("");
         onClose();
       }, 1500);
     } catch (e: any) {
-      alert(e.message ?? "Failed to add track");
+      alert(e.message ?? "Failed to add track. It might already be in the playlist.");
     } finally {
       setAddingTo(null);
     }
@@ -80,22 +70,27 @@ export function AddToPlaylistModal({ track, isOpen, onClose }: Props) {
             </div>
           ) : (
             <ul className="space-y-1">
-              {playlists.map(p => (
-                <li key={p.id}>
-                  <button 
-                    onClick={() => handleAdd(p.id)}
-                    disabled={addingTo !== null}
-                    className="w-full flex items-center justify-between p-3 rounded-md hover:bg-accent text-left disabled:opacity-50 transition"
-                  >
-                    <span className="font-medium text-sm truncate pr-4">{p.name}</span>
-                    {addingTo === p.id ? (
-                      <span className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                    ) : (
-                      <Plus size={16} className="text-muted-foreground shrink-0" />
-                    )}
-                  </button>
-                </li>
-              ))}
+              {playlists.map(p => {
+                const isAlreadyIn = p.tracks.some(t => t.id === track.id);
+                return (
+                  <li key={p.id}>
+                    <button 
+                      onClick={() => handleAdd(p.id)}
+                      disabled={addingTo !== null || isAlreadyIn}
+                      className="w-full flex items-center justify-between p-3 rounded-md hover:bg-accent text-left disabled:opacity-50 transition"
+                    >
+                      <span className="font-medium text-sm truncate pr-4">
+                        {p.name} {isAlreadyIn && <span className="text-xs text-muted-foreground ml-2">(Already added)</span>}
+                      </span>
+                      {addingTo === p.id ? (
+                        <span className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                      ) : (
+                        <Plus size={16} className="text-muted-foreground shrink-0" />
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

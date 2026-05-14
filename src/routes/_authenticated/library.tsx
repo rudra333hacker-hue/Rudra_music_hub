@@ -1,13 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { Heart, Clock, ListMusic, Plus } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Heart, Clock, ListMusic, Plus, Download, Upload } from "lucide-react";
 import { fetchHistory, fetchLikes } from "@/lib/library";
 import type { Track } from "@/lib/search";
 import { usePlayer } from "@/lib/player-context";
 import { LikeButton } from "@/components/LikeButton";
-import { getPlaylistsFn, createPlaylistFn, type Playlist } from "@/lib/playlists.functions";
-import { useServerFn } from "@tanstack/react-start";
-
+import { usePlaylists } from "@/lib/playlist-context";
 import { AddButton } from "@/components/AddButton";
 
 export const Route = createFileRoute("/_authenticated/library")({
@@ -17,20 +15,18 @@ export const Route = createFileRoute("/_authenticated/library")({
 
 function LibraryPage() {
   const { play } = usePlayer();
-  const getPlaylists = useServerFn(getPlaylistsFn);
-  const createPlaylist = useServerFn(createPlaylistFn);
+  const { playlists, createPlaylist, exportPlaylists, importPlaylists } = usePlaylists();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [tab, setTab] = useState<"liked" | "history" | "playlists">("playlists");
   const [liked, setLiked] = useState<Track[]>([]);
   const [history, setHistory] = useState<Track[]>([]);
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     if (tab === "liked") fetchLikes().then(setLiked);
     else if (tab === "history") fetchHistory(50).then(setHistory);
-    else getPlaylists().then(setPlaylists).catch(() => {});
-  }, [tab, getPlaylists]);
+  }, [tab]);
 
   const list = tab === "liked" ? liked : history;
 
@@ -39,13 +35,28 @@ function LibraryPage() {
     if (!name?.trim()) return;
     setCreating(true);
     try {
-      const p = await createPlaylist({ data: { name } });
-      setPlaylists([p, ...playlists]);
+      await createPlaylist(name);
     } catch (e) {
       alert("Failed to create playlist");
     } finally {
       setCreating(false);
     }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const text = ev.target?.result as string;
+      if (text) {
+        const success = await importPlaylists(text);
+        if (success) alert("Playlists imported successfully!");
+        else alert("Failed to import playlists. Invalid format.");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   return (
@@ -82,11 +93,21 @@ function LibraryPage() {
                     <ListMusic className="text-muted-foreground group-hover:text-primary transition" size={40} />
                   </div>
                   <div className="font-semibold truncate">{p.name}</div>
-                  <div className="text-xs text-muted-foreground">Playlist</div>
+                  <div className="text-xs text-muted-foreground">{p.tracks.length} tracks</div>
                 </Link>
               ))}
             </div>
           )}
+
+          <div className="mt-8 pt-6 border-t border-border flex gap-4 justify-center">
+            <button onClick={exportPlaylists} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+              <Download size={16} /> Export Backup
+            </button>
+            <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleImport} />
+            <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+              <Upload size={16} /> Import Backup
+            </button>
+          </div>
         </div>
       ) : list.length === 0 ? (
         <p className="text-muted-foreground text-sm">{tab === "liked" ? "No liked songs yet. Tap the heart on any track." : "Nothing here yet — start playing some music."}</p>

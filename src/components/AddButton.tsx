@@ -13,7 +13,7 @@ export function AddButton({ track }: { track: Track }) {
           e.stopPropagation();
           setModalOpen(true);
         }}
-        className="p-2 rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground transition opacity-0 group-hover:opacity-100 focus:opacity-100"
+        className="p-2 rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground transition"
         title="Add to Playlist"
       >
         <Plus size={18} />
