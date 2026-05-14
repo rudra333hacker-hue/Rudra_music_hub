@@ -164,28 +164,40 @@ function HomePage() {
   );
 }
 
+import { AddButton } from "@/components/AddButton";
+
 function TrackCard({ t, onPlay }: { t: Track; onPlay: () => void }) {
   return (
-    <button onClick={onPlay} className="group text-left bg-card hover:bg-accent transition rounded-lg p-3 flex flex-col gap-2">
-      <div className="relative aspect-square overflow-hidden rounded-md">
-        <img src={t.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition" />
+    <div className="group relative">
+      <button onClick={onPlay} className="w-full text-left bg-card hover:bg-accent transition rounded-lg p-3 flex flex-col gap-2">
+        <div className="relative aspect-square overflow-hidden rounded-md">
+          <img src={t.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition" />
+        </div>
+        <div className="text-sm font-medium line-clamp-2">{t.title}</div>
+        <div className="text-xs text-muted-foreground truncate">{t.author}</div>
+      </button>
+      <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
+        <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition flex items-center justify-center bg-background/80 backdrop-blur rounded-full">
+          <AddButton track={t} />
+        </div>
       </div>
-      <div className="text-sm font-medium line-clamp-2">{t.title}</div>
-      <div className="text-xs text-muted-foreground truncate">{t.author}</div>
-    </button>
+    </div>
   );
 }
 
 function TrackRow({ t, onPlay }: { t: Track; onPlay: () => void }) {
   return (
-    <div onClick={onPlay} className="flex items-center gap-3 p-2 rounded-md hover:bg-accent cursor-pointer">
+    <div onClick={onPlay} className="group flex items-center gap-3 p-2 rounded-md hover:bg-accent cursor-pointer">
       <img src={t.thumbnail} alt="" className="w-12 h-12 rounded object-cover" />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate">{t.title}</div>
         <div className="text-xs text-muted-foreground truncate">{t.author}</div>
       </div>
       <span className="text-xs text-muted-foreground">{fmt(t.duration)}</span>
-      <LikeButton track={t} />
+      <div className="flex items-center" onClick={e => e.stopPropagation()}>
+        <AddButton track={t} />
+        <LikeButton track={t} />
+      </div>
     </div>
   );
 }

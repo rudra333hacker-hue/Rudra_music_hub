@@ -26,9 +26,24 @@ type Props = {
   videoId: string | null;
   onEnded?: () => void;
   mode?: "audio" | "video";
+  isPlaying?: boolean;
+  seekRequest?: number | null;
+  onTimeUpdate?: (time: number) => void;
+  onDuration?: (duration: number) => void;
 };
 
-export function YouTubePlayer({ videoId, onEnded, mode = "audio" }: Props) {
+// A tiny silent WAV file encoded as base64 to keep the JS thread alive in the background
+const SILENT_WAV = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+
+export function YouTubePlayer({
+  videoId,
+  onEnded,
+  mode = "audio",
+  isPlaying = true,
+  seekRequest = null,
+  onTimeUpdate,
+  onDuration,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
   const onEndedRef = useRef(onEnded);
@@ -51,8 +66,11 @@ export function YouTubePlayer({ videoId, onEnded, mode = "audio" }: Props) {
         },
         events: {
           onStateChange: (e: any) => {
-            // 0 = ended
+            // 0 = ended, 1 = playing, 2 = paused
             if (e.data === 0) onEndedRef.current?.();
+            if (e.data === 1 && typeof playerRef.current?.getDuration === "function") {
+              onDuration?.(playerRef.current.getDuration() ?? 0);
+            }
           },
         },
       });
@@ -64,6 +82,34 @@ export function YouTubePlayer({ videoId, onEnded, mode = "audio" }: Props) {
       } catch {}
     };
   }, []);
+
+  // Sync play/pause
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    if (isPlaying && typeof p.playVideo === "function") p.playVideo();
+    if (!isPlaying && typeof p.pauseVideo === "function") p.pauseVideo();
+  }, [isPlaying]);
+
+  // Sync seek
+  useEffect(() => {
+    const p = playerRef.current;
+    if (seekRequest !== null && p && typeof p.seekTo === "function") {
+      p.seekTo(seekRequest, true);
+    }
+  }, [seekRequest]);
+
+  // Track progress
+  useEffect(() => {
+    if (!isPlaying || !onTimeUpdate) return;
+    const interval = setInterval(() => {
+      const p = playerRef.current;
+      if (p && typeof p.getCurrentTime === "function") {
+        onTimeUpdate(p.getCurrentTime() ?? 0);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isPlaying, onTimeUpdate]);
 
   // load videoId on change
   useEffect(() => {
@@ -92,14 +138,25 @@ export function YouTubePlayer({ videoId, onEnded, mode = "audio" }: Props) {
   }, [mode, videoId]);
 
   return (
-    <div
-      className={
-        mode === "video"
-          ? "w-full max-w-md aspect-video"
-          : "w-px h-px overflow-hidden opacity-0 pointer-events-none absolute"
-      }
-    >
-      <div ref={containerRef} className="w-full h-full" />
-    </div>
+    <>
+      {isPlaying && (
+        <audio
+          src={SILENT_WAV}
+          autoPlay
+          loop
+          muted={false}
+          className="hidden pointer-events-none"
+        />
+      )}
+      <div
+        className={
+          mode === "video"
+            ? "w-full max-w-md aspect-video"
+            : "w-px h-px overflow-hidden opacity-0 pointer-events-none absolute"
+        }
+      >
+        <div ref={containerRef} className="w-full h-full" />
+      </div>
+    </>
   );
 }
