@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { Track } from "./search";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export type Playlist = {
   id: string;
@@ -161,13 +160,10 @@ export const reorderPlaylistFn = createServerFn({ method: "POST" })
     updates: data?.updates as { id: string; position: number }[],
   }))
   .handler(async ({ data, context }) => {
-    const { userId } = context;
-    // Supabase JS doesn't support bulk update easily. We'll use supabaseAdmin to run rpc or loop.
-    // For simplicity, we can do multiple updates since it's an admin operation or user-scoped operation.
-    // However, updating via supabase client sequentially can be slow.
-    // Since we only reorder the current page, max ~100 items, let's do Promise.all
+    const { supabase, userId } = context;
+    // Use the user-scoped client — RLS policies allow UPDATE on own playlist_tracks
     const promises = data.updates.map((update) =>
-      supabaseAdmin
+      supabase
         .from("playlist_tracks")
         .update({ position: update.position })
         .eq("id", update.id)

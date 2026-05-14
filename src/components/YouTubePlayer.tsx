@@ -1,6 +1,5 @@
 import { useEffect, useRef } from "react";
 
-// Minimal typing for YT IFrame API
 declare global {
   interface Window {
     YT: any;
@@ -14,7 +13,18 @@ function loadYTApi(): Promise<void> {
   if (window.YT && window.YT.Player) return Promise.resolve();
   if (apiPromise) return apiPromise;
   apiPromise = new Promise((resolve) => {
+    const existing = document.getElementById("yt-iframe-api-script");
+    if (existing) {
+      // Script already injected but callback not yet fired — wait for it
+      const original = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        original?.();
+        resolve();
+      };
+      return;
+    }
     const tag = document.createElement("script");
+    tag.id = "yt-iframe-api-script";
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
     window.onYouTubeIframeAPIReady = () => resolve();
@@ -47,9 +57,16 @@ export function YouTubePlayer({
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
   const onEndedRef = useRef(onEnded);
-  onEndedRef.current = onEnded;
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  const onDurationRef = useRef(onDuration);
+  const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // init player once
+  // Keep refs current without triggering effects
+  onEndedRef.current = onEnded;
+  onTimeUpdateRef.current = onTimeUpdate;
+  onDurationRef.current = onDuration;
+
+  // Init player once
   useEffect(() => {
     let cancelled = false;
     loadYTApi().then(() => {
@@ -62,14 +79,20 @@ export function YouTubePlayer({
           playsinline: 1,
           rel: 0,
           modestbranding: 1,
-          controls: 1,
+          controls: mode === "video" ? 1 : 0,
         },
         events: {
           onStateChange: (e: any) => {
             // 0 = ended, 1 = playing, 2 = paused
-            if (e.data === 0) onEndedRef.current?.();
-            if (e.data === 1 && typeof playerRef.current?.getDuration === "function") {
-              onDuration?.(playerRef.current.getDuration() ?? 0);
+            if (e.data === 0) {
+              onEndedRef.current?.();
+            }
+            if (e.data === 1) {
+              const p = playerRef.current;
+              if (p && typeof p.getDuration === "function") {
+                const dur = p.getDuration();
+                if (dur > 0) onDurationRef.current?.(dur);
+              }
             }
           },
         },
@@ -77,41 +100,14 @@ export function YouTubePlayer({
     });
     return () => {
       cancelled = true;
-      try {
-        playerRef.current?.destroy?.();
-      } catch {}
+      if (progressInterval.current) clearInterval(progressInterval.current);
+      try { playerRef.current?.destroy?.(); } catch {}
+      playerRef.current = null;
     };
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only on mount
 
-  // Sync play/pause
-  useEffect(() => {
-    const p = playerRef.current;
-    if (!p) return;
-    if (isPlaying && typeof p.playVideo === "function") p.playVideo();
-    if (!isPlaying && typeof p.pauseVideo === "function") p.pauseVideo();
-  }, [isPlaying]);
-
-  // Sync seek
-  useEffect(() => {
-    const p = playerRef.current;
-    if (seekRequest !== null && p && typeof p.seekTo === "function") {
-      p.seekTo(seekRequest, true);
-    }
-  }, [seekRequest]);
-
-  // Track progress
-  useEffect(() => {
-    if (!isPlaying || !onTimeUpdate) return;
-    const interval = setInterval(() => {
-      const p = playerRef.current;
-      if (p && typeof p.getCurrentTime === "function") {
-        onTimeUpdate(p.getCurrentTime() ?? 0);
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isPlaying, onTimeUpdate]);
-
-  // load videoId on change
+  // Sync videoId — reload when song changes
   useEffect(() => {
     if (!videoId) return;
     const tryLoad = () => {
@@ -125,8 +121,55 @@ export function YouTubePlayer({
     tryLoad();
   }, [videoId]);
 
-  // Try to reduce bandwidth in audio mode by requesting the lowest playback quality.
-  // Note: YouTube does not guarantee audio-only streams via the IFrame API.
+  // Sync play/pause state
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    try {
+      if (isPlaying && typeof p.playVideo === "function") p.playVideo();
+      else if (!isPlaying && typeof p.pauseVideo === "function") p.pauseVideo();
+    } catch {}
+  }, [isPlaying]);
+
+  // Sync seek
+  useEffect(() => {
+    if (seekRequest === null) return;
+    const p = playerRef.current;
+    if (p && typeof p.seekTo === "function") {
+      try { p.seekTo(seekRequest, true); } catch {}
+    }
+  }, [seekRequest]);
+
+  // Progress tracking interval — only when playing
+  useEffect(() => {
+    if (progressInterval.current) {
+      clearInterval(progressInterval.current);
+      progressInterval.current = null;
+    }
+    if (!isPlaying) return;
+    progressInterval.current = setInterval(() => {
+      const p = playerRef.current;
+      if (!p) return;
+      try {
+        if (typeof p.getCurrentTime === "function") {
+          const t = p.getCurrentTime();
+          if (t !== undefined) onTimeUpdateRef.current?.(t);
+        }
+        if (typeof p.getDuration === "function") {
+          const d = p.getDuration();
+          if (d > 0) onDurationRef.current?.(d);
+        }
+      } catch {}
+    }, 1000);
+    return () => {
+      if (progressInterval.current) {
+        clearInterval(progressInterval.current);
+        progressInterval.current = null;
+      }
+    };
+  }, [isPlaying]);
+
+  // Audio-only quality optimisation
   useEffect(() => {
     const p = playerRef.current;
     if (!p) return;
@@ -135,10 +178,11 @@ export function YouTubePlayer({
         p.setPlaybackQuality("tiny");
       }
     } catch {}
-  }, [mode, videoId]);
+  }, [mode]);
 
   return (
     <>
+      {/* Silent audio keeps background thread alive on mobile */}
       {isPlaying && (
         <audio
           src={SILENT_WAV}
