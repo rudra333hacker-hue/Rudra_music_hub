@@ -32,11 +32,83 @@ export default defineConfig(({ command }) => ({
         ],
       },
       workbox: {
-        // Avoid caching large/streaming media.
+        // Cache the app shell for offline access
         globPatterns: ["**/*.{js,css,html,ico,svg,png,webmanifest,json,txt,woff2}"],
+        // Navigate to the cached app shell when offline (prevents "offline" error page)
+        navigateFallback: "/index.html",
+        navigateFallbackDenylist: [
+          // Don't intercept API/server function calls
+          /^\/_server/,
+          /^\/api\//,
+        ],
         runtimeCaching: [
           {
-            urlPattern: ({ url }) => url.origin.includes("youtube.com") || url.origin.includes("googlevideo.com"),
+            // Cache YouTube thumbnails for offline display
+            urlPattern: ({ url }) => url.hostname === "i.ytimg.com",
+            handler: "CacheFirst",
+            options: {
+              cacheName: "yt-thumbnails",
+              expiration: {
+                maxEntries: 200,
+                maxAgeSeconds: 30 * 24 * 60 * 60, // 30 days
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Cache Piped/Invidious audio streams for offline playback
+            urlPattern: ({ url }) =>
+              url.hostname.includes("googlevideo.com") ||
+              url.hostname.includes("pipedproxy") ||
+              url.pathname.includes("/videoplayback"),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "audio-streams",
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
+              },
+              cacheableResponse: { statuses: [0, 200, 206] },
+              rangeRequests: true,
+            },
+          },
+          {
+            // Cache Piped/Invidious API responses with StaleWhileRevalidate
+            // so stream URLs can be resolved even when temporarily offline
+            urlPattern: ({ url }) =>
+              url.hostname.includes("pipedapi") ||
+              url.hostname.includes("piped") ||
+              url.hostname.includes("invidious") ||
+              url.pathname.includes("/streams/") ||
+              url.pathname.includes("/api/v1/videos/"),
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "stream-api",
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 24 * 60 * 60, // 24 hours
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Cache Google Fonts
+            urlPattern: ({ url }) =>
+              url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com",
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "google-fonts",
+              expiration: {
+                maxEntries: 20,
+                maxAgeSeconds: 365 * 24 * 60 * 60, // 1 year
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Don't cache YouTube iframe API or video embeds
+            urlPattern: ({ url }) =>
+              url.hostname === "www.youtube.com" || url.hostname === "youtube.com",
             handler: "NetworkOnly",
           },
         ],

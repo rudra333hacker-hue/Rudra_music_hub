@@ -42,6 +42,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const historyRef = useRef<Track[]>([]);
   const silentRef = useRef<HTMLAudioElement>(null);
 
+  // Keep a ref to current so callbacks always see the latest value
+  const currentRef = useRef<Track | null>(null);
+  currentRef.current = current;
+
   // Synchronously play silent audio to unlock background JS thread on iOS
   const unlockAudio = useCallback(() => {
     if (silentRef.current) {
@@ -68,17 +72,25 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const play = useCallback((track: Track, q: Track[] = []) => {
     unlockAudio();
-    if (current) historyRef.current.push(current);
+    // Use the ref to get the current track (avoids stale closure)
+    const prev = currentRef.current;
+    if (prev) historyRef.current.push(prev);
+
+    // Reset playback state for new track
+    setCurrentTime(0);
+    setDuration(0);
+    setSeekRequest(null);
+
     setCurrent(track);
     setQueue(q);
     setIsPlaying(true);
-    setCurrentTime(0);
     recordPlay(track).catch(() => {});
-  }, [current, unlockAudio]);
+  }, [unlockAudio]);
 
   const next = useCallback(() => {
     unlockAudio();
-    if (repeatMode === "one" && current) {
+    const cur = currentRef.current;
+    if (repeatMode === "one" && cur) {
       setSeekRequest(0);
       setIsPlaying(true);
       return;
@@ -86,12 +98,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (!queue.length) {
       if (repeatMode === "all" && historyRef.current.length > 0) {
         // loop back to first song in history
-        const all = [...historyRef.current, current!];
+        const all = [...historyRef.current, cur!];
         historyRef.current = [];
         setCurrent(all[0]);
         setQueue(all.slice(1));
         setIsPlaying(true);
         setCurrentTime(0);
+        setDuration(0);
         return;
       }
       setCurrent(null);
@@ -100,13 +113,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       return;
     }
     const [n, ...rest] = queue;
-    if (current) historyRef.current.push(current);
+    if (cur) historyRef.current.push(cur);
     setCurrent(n);
     setQueue(rest);
     setIsPlaying(true);
     setCurrentTime(0);
+    setDuration(0);
     recordPlay(n).catch(() => {});
-  }, [queue, current, repeatMode, unlockAudio, pauseUnlock]);
+  }, [queue, repeatMode, unlockAudio, pauseUnlock]);
 
   const prev = useCallback(() => {
     unlockAudio();
@@ -116,11 +130,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     }
     const last = historyRef.current.pop();
     if (!last) return;
-    if (current) setQueue((q) => [current, ...q]);
+    const cur = currentRef.current;
+    if (cur) setQueue((q) => [cur, ...q]);
     setCurrent(last);
     setIsPlaying(true);
     setCurrentTime(0);
-  }, [current, currentTime, unlockAudio]);
+    setDuration(0);
+  }, [currentTime, unlockAudio]);
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;

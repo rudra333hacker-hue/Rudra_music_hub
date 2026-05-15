@@ -62,8 +62,22 @@ async function callAI(systemPrompt: string, userPrompt: string): Promise<Suggest
         .join("") ?? "";
     if (!text) return [];
     const parsed = JSON.parse(text);
-    return Array.isArray(parsed?.songs) ? parsed.songs.slice(0, 20) : [];
-  } catch {
+    
+    // Robust extraction — handle various shapes
+    let songs: any[] = [];
+    if (Array.isArray(parsed?.songs)) {
+      songs = parsed.songs;
+    } else if (Array.isArray(parsed)) {
+      songs = parsed;
+    }
+    
+    // Validate each entry has at minimum title and artist strings
+    return songs
+      .filter((s: any) => typeof s?.title === "string" && s.title.trim() && typeof s?.artist === "string" && s.artist.trim())
+      .slice(0, 20)
+      .map((s: any) => ({ title: s.title.trim(), artist: s.artist.trim(), reason: s.reason }));
+  } catch (e) {
+    console.error("[Suggestions] Failed to parse AI response:", e);
     return [];
   }
 }
@@ -215,14 +229,24 @@ export const getSuggestionsFn = createServerFn({ method: "POST" })
         "Create a fresh 'Gen-Z Mix' of 12 songs. Return JSON only.";
     }
 
-    // Try Gemini first, fallback to curated lists if it fails
-    try {
-      const aiResults = await callAI(system, user);
-      if (aiResults.length > 0) return aiResults;
-    } catch (e: any) {
-      console.error("[Suggestions] AI failed, using fallback:", e.message);
+    // Try Gemini first, with one retry on empty results
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const aiResults = await callAI(system, user);
+        if (aiResults.length > 0) return aiResults;
+        // If empty on first attempt, retry with simplified prompt
+        if (attempt === 0) {
+          user += "\n\nIMPORTANT: You must return exactly 12 songs. Do not return empty results.";
+        }
+      } catch (e: any) {
+        console.error(`[Suggestions] AI attempt ${attempt + 1} failed:`, e.message);
+        if (attempt === 1 || e.message?.includes("rate limit") || e.message?.includes("invalid")) {
+          break; // Don't retry rate limits or auth errors
+        }
+      }
     }
 
     // Fallback: return curated recommendations
+    console.log("[Suggestions] Using fallback suggestions");
     return getFallbackSuggestions(histArr, likeArr, data.mode, data.mood);
   });

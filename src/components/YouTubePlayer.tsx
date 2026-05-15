@@ -73,29 +73,37 @@ export function YouTubePlayer({
   const lastTimeRef = useRef(0);
   const retryTimeoutRef = useRef<any>(null);
 
+  // === CRITICAL: Generation counter to prevent stale stream fetches ===
+  const fetchGenRef = useRef(0);
+
   // === 1. Fetch Native Audio URL when in Audio Mode ===
   const fetchNativeStream = useCallback(async (vId: string, resumeTime: number = 0) => {
+    const gen = ++fetchGenRef.current;
     try {
       const res = await getAudioStream({ data: { videoId: vId } });
+      // If a newer fetch was initiated, discard this stale result
+      if (gen !== fetchGenRef.current) return;
       if (res?.url) {
         setAudioUrl(res.url);
-        // If we were supposed to resume, seek to that time once loaded
-        if (resumeTime > 0 && nativeAudioRef.current) {
-          nativeAudioRef.current.currentTime = resumeTime;
-        }
       }
     } catch (e) {
+      if (gen !== fetchGenRef.current) return;
       console.error("Failed to fetch audio stream:", e);
     }
   }, [getAudioStream]);
 
+  // When videoId or mode changes, fetch new stream (or clear it)
   useEffect(() => {
     if (!videoId) {
       setAudioUrl(null);
       return;
     }
+    // Reset time tracking for new track
+    lastTimeRef.current = 0;
     if (mode === "audio") {
-      fetchNativeStream(videoId, lastTimeRef.current);
+      // Clear old URL immediately so old audio stops
+      setAudioUrl(null);
+      fetchNativeStream(videoId, 0);
     }
   }, [videoId, mode, fetchNativeStream]);
 
@@ -119,31 +127,52 @@ export function YouTubePlayer({
     
     const handleEnded = () => onEndedRef.current?.();
 
+    // Auto-play once the new audio source has loaded enough data
+    const handleCanPlay = () => {
+      if (isPlayingRef.current && modeRef.current === "audio") {
+        audio.play().catch(e => console.log("Autoplay blocked:", e));
+      }
+    };
+
     // Stream drop recovery logic
-    const handleStreamDrop = (e: Event) => {
-      console.warn("Native audio stream stalled or errored. Attempting recovery...", e.type);
+    const handleError = (e: Event) => {
+      console.warn("Native audio error. Attempting recovery...", e);
       if (videoIdRef.current && modeRef.current === "audio" && isPlayingRef.current) {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = setTimeout(() => {
-          // Re-fetch the stream and resume from exactly where it dropped
           fetchNativeStream(videoIdRef.current!, lastTimeRef.current);
-        }, 1000);
+        }, 2000);
+      }
+    };
+
+    const handleStalled = () => {
+      // Only retry if truly stuck (not just buffering)
+      if (videoIdRef.current && modeRef.current === "audio" && isPlayingRef.current) {
+        clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = setTimeout(() => {
+          // Check if still stalled after 5 seconds
+          if (audio.readyState < 3 && isPlayingRef.current) {
+            fetchNativeStream(videoIdRef.current!, lastTimeRef.current);
+          }
+        }, 5000);
       }
     };
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("durationchange", handleDuration);
     audio.addEventListener("ended", handleEnded);
-    audio.addEventListener("error", handleStreamDrop);
-    audio.addEventListener("stalled", handleStreamDrop);
+    audio.addEventListener("canplay", handleCanPlay);
+    audio.addEventListener("error", handleError);
+    audio.addEventListener("stalled", handleStalled);
 
     return () => {
       clearTimeout(retryTimeoutRef.current);
       audio.removeEventListener("timeupdate", handleTimeUpdate);
       audio.removeEventListener("durationchange", handleDuration);
       audio.removeEventListener("ended", handleEnded);
-      audio.removeEventListener("error", handleStreamDrop);
-      audio.removeEventListener("stalled", handleStreamDrop);
+      audio.removeEventListener("canplay", handleCanPlay);
+      audio.removeEventListener("error", handleError);
+      audio.removeEventListener("stalled", handleStalled);
     };
   }, [fetchNativeStream]);
 
@@ -251,25 +280,25 @@ export function YouTubePlayer({
       }
       if (yt && typeof yt.loadVideoById === "function") {
         try {
-          const currentUrl = yt.getVideoUrl?.() || "";
-          if (currentUrl.includes(videoId)) {
-            yt.seekTo(lastTimeRef.current, true);
-            if (isPlaying) yt.playVideo();
-          } else {
-            yt.loadVideoById(videoId, lastTimeRef.current);
-          }
+          yt.loadVideoById(videoId, lastTimeRef.current);
         } catch {}
       }
     }
-  }, [mode, videoId, isPlaying, stopYtTimer]);
+  }, [mode, videoId, stopYtTimer]);
 
   // === 5. Sync Play/Pause ===
   useEffect(() => {
     if (mode === "audio") {
       const audio = nativeAudioRef.current;
-      if (!audio || !audio.src) return;
+      if (!audio) return;
+      // Only try to play/pause if we have a source
+      if (!audioUrl) return;
       if (isPlaying) {
-        audio.play().catch(e => console.log("Native audio autoplay blocked:", e));
+        // The audio element auto-plays via the canplay handler when a new source loads.
+        // This effect handles pause/resume toggling for an already-loaded source.
+        if (audio.readyState >= 2) {
+          audio.play().catch(e => console.log("Native audio play blocked:", e));
+        }
       } else {
         audio.pause();
       }
@@ -293,7 +322,7 @@ export function YouTubePlayer({
     
     if (mode === "audio") {
       const audio = nativeAudioRef.current;
-      if (audio) {
+      if (audio && audio.readyState >= 1) {
         audio.currentTime = seekRequest;
       }
     } else {
@@ -311,6 +340,7 @@ export function YouTubePlayer({
         ref={nativeAudioRef}
         src={mode === "audio" && audioUrl ? audioUrl : undefined}
         preload="auto"
+        playsInline
         className="hidden pointer-events-none"
       />
       
