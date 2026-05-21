@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
@@ -110,8 +111,81 @@ function RootShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function performHardReset() {
+  if (typeof window === "undefined") return;
+
+  console.log("Starting application hard reset...");
+
+  // 1. Unregister all Service Workers
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister().then((success) => {
+          console.log(`ServiceWorker unregistered: ${success}`);
+        });
+      }
+    });
+  }
+
+  // 2. Clear all Cache Storage
+  if ("caches" in window) {
+    caches.keys().then((names) => {
+      for (const name of names) {
+        caches.delete(name).then((success) => {
+          console.log(`Cache "${name}" deleted: ${success}`);
+        });
+      }
+    });
+  }
+
+  // 3. Clear IndexedDB
+  if ("indexedDB" in window) {
+    try {
+      const req = indexedDB.deleteDatabase("RudraMusicHub");
+      req.onsuccess = () => console.log("IndexedDB database deleted successfully");
+      req.onerror = () => console.error("Error deleting IndexedDB database");
+      req.onblocked = () => console.warn("Delete IndexedDB database blocked");
+    } catch (e) {
+      console.error("Error calling indexedDB.deleteDatabase:", e);
+    }
+  }
+
+  // 4. Clear LocalStorage and SessionStorage
+  try {
+    localStorage.clear();
+    sessionStorage.clear();
+    console.log("Storage cleared");
+  } catch (e) {
+    console.error("Error clearing storage:", e);
+  }
+
+  // Set the flag so we don't loop endlessly after reload
+  try {
+    localStorage.setItem("hard_reset_performed_v1", "true");
+  } catch (e) {}
+
+  // 5. Reload the page
+  setTimeout(() => {
+    window.location.reload();
+  }, 1000);
+}
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Expose hard reset function on window object for manual execution
+    (window as any).hardReset = performHardReset;
+
+    const needsReset = localStorage.getItem("hard_reset_performed_v1") !== "true" || 
+                        window.location.search.includes("hard-reset=true");
+
+    if (needsReset) {
+      performHardReset();
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
