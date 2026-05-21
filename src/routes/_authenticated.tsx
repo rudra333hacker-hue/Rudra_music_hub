@@ -183,7 +183,16 @@ function NowPlayingBar() {
     queue.length > 0 ? (
       <div className="w-full bg-secondary/30 rounded-xl p-3 flex items-center gap-3 flex-shrink-0">
         <div className="flex-shrink-0 w-11 h-11 rounded-lg overflow-hidden bg-secondary">
-          <img src={queue[0].thumbnail} alt="" className="w-full h-full object-cover" />
+          <img
+            src={queue[0].thumbnail}
+            alt=""
+            className="w-full h-full object-cover"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "/logo.png";
+            }}
+          />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[10px] text-primary uppercase font-bold tracking-widest mb-0.5">
@@ -296,6 +305,11 @@ function NowPlayingBar() {
             alt=""
             className="w-11 h-11 rounded object-cover cursor-pointer flex-shrink-0"
             onClick={() => setFullScreen(true)}
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "/logo.png";
+            }}
           />
           <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setFullScreen(true)}>
             <div className="text-sm font-semibold truncate leading-tight">{current.title}</div>
@@ -380,7 +394,16 @@ function NowPlayingBar() {
             {activeTab === "player" && (
               <div className="flex-1 flex flex-col justify-center gap-5 w-full overflow-y-auto no-scrollbar pb-2">
                 <div className="w-full aspect-square rounded-xl overflow-hidden shadow-2xl flex-shrink-0">
-                  <img src={current.thumbnail} alt="" className="w-full h-full object-cover" />
+                  <img
+                    src={current.thumbnail}
+                    alt=""
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = "/logo.png";
+                    }}
+                  />
                 </div>
                 <div className="w-full flex items-center justify-between gap-3 flex-shrink-0">
                   <div className="flex-1 min-w-0">
@@ -435,6 +458,11 @@ function NowPlayingBar() {
                     src={current.thumbnail}
                     alt=""
                     className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = "/logo.png";
+                    }}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-bold truncate">{current.title}</div>

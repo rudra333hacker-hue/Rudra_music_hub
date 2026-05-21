@@ -285,6 +285,11 @@ function TrackCard({ t, onPlay }: { t: Track; onPlay: () => void }) {
             alt=""
             loading="lazy"
             className="w-full h-full object-cover group-hover:scale-105 transition"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "/logo.png";
+            }}
           />
         </div>
         <div className="text-xs sm:text-sm font-medium line-clamp-2">{t.title}</div>
@@ -309,6 +314,11 @@ function TrackRow({ t, onPlay }: { t: Track; onPlay: () => void }) {
         src={t.thumbnail}
         alt=""
         className="w-10 h-10 sm:w-12 sm:h-12 rounded object-cover shrink-0"
+        referrerPolicy="no-referrer"
+        onError={(e) => {
+          e.currentTarget.onerror = null;
+          e.currentTarget.src = "/logo.png";
+        }}
       />
       <div className="flex-1 min-w-0">
         <div className="text-xs sm:text-sm font-medium truncate">{t.title}</div>

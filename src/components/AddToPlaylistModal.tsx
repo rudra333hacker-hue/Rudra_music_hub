@@ -59,7 +59,16 @@ export function AddToPlaylistModal({ track, isOpen, onClose }: Props) {
         </div>
 
         <div className="p-4 flex items-center gap-3 bg-secondary/30">
-          <img src={track.thumbnail} alt="" className="w-10 h-10 rounded object-cover" />
+          <img
+            src={track.thumbnail}
+            alt=""
+            className="w-10 h-10 rounded object-cover"
+            referrerPolicy="no-referrer"
+            onError={(e) => {
+              e.currentTarget.onerror = null;
+              e.currentTarget.src = "/logo.png";
+            }}
+          />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium truncate">{track.title}</div>
             <div className="text-xs text-muted-foreground truncate">{track.author}</div>

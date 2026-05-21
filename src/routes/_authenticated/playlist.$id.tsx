@@ -78,6 +78,11 @@ function PlaylistPage() {
               src={playlist.tracks[0].thumbnail}
               alt=""
               className="w-full h-full object-cover opacity-80"
+              referrerPolicy="no-referrer"
+              onError={(e) => {
+                e.currentTarget.onerror = null;
+                e.currentTarget.src = "/logo.png";
+              }}
             />
           ) : (
             <Play size={48} className="text-muted-foreground/30" />
@@ -141,7 +146,16 @@ function PlaylistPage() {
                   <ChevronDown size={16} />
                 </button>
               </div>
-              <img src={t.thumbnail} alt="" className="w-12 h-12 rounded object-cover" />
+              <img
+                src={t.thumbnail}
+                alt=""
+                className="w-12 h-12 rounded object-cover"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = "/logo.png";
+                }}
+              />
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{t.title}</div>
                 <div className="text-xs text-muted-foreground truncate">{t.author}</div>

@@ -150,7 +150,16 @@ function LibraryPage() {
               className="group flex items-center gap-3 p-3 hover:bg-accent cursor-pointer"
             >
               <span className="w-6 text-right text-xs text-muted-foreground">{i + 1}</span>
-              <img src={t.thumbnail} alt="" className="w-12 h-12 rounded object-cover" />
+              <img
+                src={t.thumbnail}
+                alt=""
+                className="w-12 h-12 rounded object-cover"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = "/logo.png";
+                }}
+              />
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">{t.title}</div>
                 <div className="text-xs text-muted-foreground truncate">{t.author}</div>
