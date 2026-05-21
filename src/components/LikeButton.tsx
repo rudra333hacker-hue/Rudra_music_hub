@@ -9,12 +9,17 @@ export function LikeButton({ track, size = 18 }: { track: Track; size?: number }
 
   useEffect(() => {
     let active = true;
-    supabase
-      .from("liked_tracks")
-      .select("track_id")
-      .eq("track_id", track.id)
-      .maybeSingle()
-      .then(({ data }) => active && setLiked(!!data));
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!active || !user) return;
+      const { data } = await supabase
+        .from("liked_tracks")
+        .select("track_id")
+        .eq("track_id", track.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (active) setLiked(!!data);
+    })();
     return () => {
       active = false;
     };
@@ -31,7 +36,11 @@ export function LikeButton({ track, size = 18 }: { track: Track; size?: number }
       aria-label={liked ? "Unlike" : "Like"}
       className="text-muted-foreground hover:text-primary transition"
     >
-      <Heart size={size} fill={liked ? "currentColor" : "none"} className={liked ? "text-primary" : ""} />
+      <Heart
+        size={size}
+        fill={liked ? "currentColor" : "none"}
+        className={liked ? "text-primary" : ""}
+      />
     </button>
   );
 }

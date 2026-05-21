@@ -73,12 +73,12 @@ export async function overwriteAllPlaylists(playlists: Playlist[]): Promise<void
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
     const store = tx.objectStore(STORE_NAME);
-    
+
     // Clear existing
     store.clear();
-    
+
     // Insert new ones
-    playlists.forEach(p => store.put(p));
+    playlists.forEach((p) => store.put(p));
 
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);

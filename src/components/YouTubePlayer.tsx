@@ -17,7 +17,10 @@ function loadYTApi(): Promise<void> {
   apiPromise = new Promise((resolve) => {
     if (document.getElementById("yt-iframe-api")) {
       const orig = window.onYouTubeIframeAPIReady;
-      window.onYouTubeIframeAPIReady = () => { orig?.(); resolve(); };
+      window.onYouTubeIframeAPIReady = () => {
+        orig?.();
+        resolve();
+      };
       return;
     }
     const tag = document.createElement("script");
@@ -54,19 +57,22 @@ export function YouTubePlayer({
 
   const getAudioStream = useServerFn(getAudioStreamFn);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [streamFailed, setStreamFailed] = useState<boolean>(false);
+
+  const activePlayer = mode === "video" || streamFailed ? "iframe" : "native";
+  const activePlayerRef = useRef(activePlayer);
+  activePlayerRef.current = activePlayer;
 
   const onEndedRef = useRef(onEnded);
   const onTimeUpdateRef = useRef(onTimeUpdate);
   const onDurationRef = useRef(onDuration);
   const videoIdRef = useRef(videoId);
-  const modeRef = useRef(mode);
   const isPlayingRef = useRef(isPlaying);
 
   onEndedRef.current = onEnded;
   onTimeUpdateRef.current = onTimeUpdate;
   onDurationRef.current = onDuration;
   videoIdRef.current = videoId;
-  modeRef.current = mode;
   isPlayingRef.current = isPlaying;
 
   // Track the last known time so we can sync when switching modes or recovering from a stream drop
@@ -77,20 +83,28 @@ export function YouTubePlayer({
   const fetchGenRef = useRef(0);
 
   // === 1. Fetch Native Audio URL when in Audio Mode ===
-  const fetchNativeStream = useCallback(async (vId: string, resumeTime: number = 0) => {
-    const gen = ++fetchGenRef.current;
-    try {
-      const res = await getAudioStream({ data: { videoId: vId } });
-      // If a newer fetch was initiated, discard this stale result
-      if (gen !== fetchGenRef.current) return;
-      if (res?.url) {
-        setAudioUrl(res.url);
+  const fetchNativeStream = useCallback(
+    async (vId: string, resumeTime: number = 0) => {
+      const gen = ++fetchGenRef.current;
+      try {
+        setStreamFailed(false);
+        const res = await getAudioStream({ data: { videoId: vId } });
+        // If a newer fetch was initiated, discard this stale result
+        if (gen !== fetchGenRef.current) return;
+        if (res?.url) {
+          setAudioUrl(res.url);
+          setStreamFailed(false);
+        } else {
+          setStreamFailed(true);
+        }
+      } catch (e) {
+        if (gen !== fetchGenRef.current) return;
+        console.error("Failed to fetch audio stream:", e);
+        setStreamFailed(true);
       }
-    } catch (e) {
-      if (gen !== fetchGenRef.current) return;
-      console.error("Failed to fetch audio stream:", e);
-    }
-  }, [getAudioStream]);
+    },
+    [getAudioStream],
+  );
 
   // When videoId or mode changes, fetch new stream (or clear it)
   useEffect(() => {
@@ -118,26 +132,26 @@ export function YouTubePlayer({
       }
       onTimeUpdateRef.current?.(audio.currentTime);
     };
-    
+
     const handleDuration = () => {
       if (audio.duration && audio.duration !== Infinity) {
         onDurationRef.current?.(audio.duration);
       }
     };
-    
+
     const handleEnded = () => onEndedRef.current?.();
 
     // Auto-play once the new audio source has loaded enough data
     const handleCanPlay = () => {
-      if (isPlayingRef.current && modeRef.current === "audio") {
-        audio.play().catch(e => console.log("Autoplay blocked:", e));
+      if (isPlayingRef.current && activePlayerRef.current === "native") {
+        audio.play().catch((e) => console.log("Autoplay blocked:", e));
       }
     };
 
     // Stream drop recovery logic
     const handleError = (e: Event) => {
       console.warn("Native audio error. Attempting recovery...", e);
-      if (videoIdRef.current && modeRef.current === "audio" && isPlayingRef.current) {
+      if (videoIdRef.current && activePlayerRef.current === "native" && isPlayingRef.current) {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = setTimeout(() => {
           fetchNativeStream(videoIdRef.current!, lastTimeRef.current);
@@ -147,7 +161,7 @@ export function YouTubePlayer({
 
     const handleStalled = () => {
       // Only retry if truly stuck (not just buffering)
-      if (videoIdRef.current && modeRef.current === "audio" && isPlayingRef.current) {
+      if (videoIdRef.current && activePlayerRef.current === "native" && isPlayingRef.current) {
         clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = setTimeout(() => {
           // Check if still stalled after 5 seconds
@@ -178,12 +192,12 @@ export function YouTubePlayer({
 
   // === 3. YT IFrame Player Lifecycle ===
   const ytTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  
+
   const startYtTimer = useCallback(() => {
     if (ytTimerRef.current) return;
     ytTimerRef.current = setInterval(() => {
       const p = ytPlayerRef.current;
-      if (!p || modeRef.current !== "video") return;
+      if (!p || activePlayerRef.current !== "iframe") return;
       try {
         if (typeof p.getCurrentTime === "function") {
           const t = p.getCurrentTime();
@@ -225,27 +239,34 @@ export function YouTubePlayer({
         },
         events: {
           onReady: () => {
-            if (videoIdRef.current && modeRef.current === "video") {
-              ytPlayerRef.current.loadVideoById(videoIdRef.current, lastTimeRef.current);
+            if (videoIdRef.current && activePlayerRef.current === "iframe") {
+              if (isPlayingRef.current) {
+                ytPlayerRef.current.loadVideoById(videoIdRef.current, lastTimeRef.current);
+              } else {
+                ytPlayerRef.current.cueVideoById(videoIdRef.current, lastTimeRef.current);
+              }
             }
           },
           onStateChange: (e: any) => {
-            if (modeRef.current !== "video") return;
-            if (e.data === 0) { // ENDED
+            if (activePlayerRef.current !== "iframe") return;
+            if (e.data === 0) {
+              // ENDED
               stopYtTimer();
               onEndedRef.current?.();
-            } else if (e.data === 1) { // PLAYING
+            } else if (e.data === 1) {
+              // PLAYING
               startYtTimer();
               try {
                 const dur = ytPlayerRef.current?.getDuration?.();
                 if (dur > 0) onDurationRef.current?.(dur);
               } catch {}
-            } else if (e.data === 2) { // PAUSED
+            } else if (e.data === 2) {
+              // PAUSED
               stopYtTimer();
             }
           },
           onError: (e: any) => {
-            if (modeRef.current !== "video") return;
+            if (activePlayerRef.current !== "iframe") return;
             if (e.data === 150 || e.data === 101) onEndedRef.current?.();
           },
         },
@@ -255,7 +276,9 @@ export function YouTubePlayer({
     return () => {
       cancelled = true;
       stopYtTimer();
-      try { ytPlayerRef.current?.destroy?.(); } catch {}
+      try {
+        ytPlayerRef.current?.destroy?.();
+      } catch {}
       ytPlayerRef.current = null;
     };
   }, [startYtTimer, stopYtTimer]);
@@ -263,32 +286,43 @@ export function YouTubePlayer({
   // === 4. Mode Switching (Sync Time between Native and YT) ===
   useEffect(() => {
     if (!videoId) return;
-    
+
     const audio = nativeAudioRef.current;
     const yt = ytPlayerRef.current;
 
-    if (mode === "audio") {
-      // Switch TO Audio
+    if (activePlayer === "native") {
+      // Switch TO Native
       if (yt && typeof yt.pauseVideo === "function") {
-        try { yt.pauseVideo(); } catch {}
+        try {
+          yt.pauseVideo();
+        } catch {}
       }
       stopYtTimer();
     } else {
-      // Switch TO Video
+      // Switch TO IFrame
       if (audio) {
         audio.pause();
       }
-      if (yt && typeof yt.loadVideoById === "function") {
+      if (yt) {
         try {
-          yt.loadVideoById(videoId, lastTimeRef.current);
+          const videoIdData = typeof yt.getVideoData === "function" ? yt.getVideoData() : null;
+          const currentId = videoIdData ? videoIdData.video_id : null;
+          
+          if (currentId !== videoId) {
+            if (isPlayingRef.current) {
+              if (typeof yt.loadVideoById === "function") yt.loadVideoById(videoId, lastTimeRef.current);
+            } else {
+              if (typeof yt.cueVideoById === "function") yt.cueVideoById(videoId, lastTimeRef.current);
+            }
+          }
         } catch {}
       }
     }
-  }, [mode, videoId, stopYtTimer]);
+  }, [activePlayer, videoId, stopYtTimer]);
 
   // === 5. Sync Play/Pause ===
   useEffect(() => {
-    if (mode === "audio") {
+    if (activePlayer === "native") {
       const audio = nativeAudioRef.current;
       if (!audio) return;
       // Only try to play/pause if we have a source
@@ -297,7 +331,7 @@ export function YouTubePlayer({
         // The audio element auto-plays via the canplay handler when a new source loads.
         // This effect handles pause/resume toggling for an already-loaded source.
         if (audio.readyState >= 2) {
-          audio.play().catch(e => console.log("Native audio play blocked:", e));
+          audio.play().catch((e) => console.log("Native audio play blocked:", e));
         }
       } else {
         audio.pause();
@@ -313,14 +347,19 @@ export function YouTubePlayer({
         }
       } catch {}
     }
-  }, [isPlaying, mode, audioUrl]); 
+  }, [isPlaying, activePlayer, audioUrl]);
 
   // === 6. Sync Seek Requests ===
+  const lastSeekAppliedRef = useRef<number | null>(null);
+
   useEffect(() => {
     if (seekRequest === null) return;
+    // Avoid re-applying the same seek value (prevents infinite loop)
+    if (seekRequest === lastSeekAppliedRef.current) return;
+    lastSeekAppliedRef.current = seekRequest;
     lastTimeRef.current = seekRequest;
-    
-    if (mode === "audio") {
+
+    if (activePlayer === "native") {
       const audio = nativeAudioRef.current;
       if (audio && audio.readyState >= 1) {
         audio.currentTime = seekRequest;
@@ -328,28 +367,30 @@ export function YouTubePlayer({
     } else {
       const yt = ytPlayerRef.current;
       if (yt && typeof yt.seekTo === "function") {
-        try { yt.seekTo(seekRequest, true); } catch {}
+        try {
+          yt.seekTo(seekRequest, true);
+        } catch {}
       }
     }
-  }, [seekRequest, mode]);
+  }, [seekRequest, activePlayer]);
 
   return (
     <>
       {/* 100% Native Authentic Background HTML5 Audio */}
       <audio
         ref={nativeAudioRef}
-        src={mode === "audio" && audioUrl ? audioUrl : undefined}
+        src={activePlayer === "native" && audioUrl ? audioUrl : undefined}
         preload="auto"
         playsInline
         className="hidden pointer-events-none"
       />
-      
+
       {/* YT IFrame Video Player */}
       <div
         className={
           mode === "video"
             ? "w-full aspect-video rounded-lg overflow-hidden bg-black"
-            : "w-0 h-0 overflow-hidden opacity-0 pointer-events-none absolute"
+            : "w-[1px] h-[1px] overflow-hidden opacity-0 pointer-events-none absolute"
         }
       >
         <div ref={containerRef} className="w-full h-full" />

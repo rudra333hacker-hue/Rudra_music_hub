@@ -10,6 +10,14 @@ const PIPED_INSTANCES = [
   "https://pipedapi.ducks.party",
 ];
 
+const INVIDIOUS_INSTANCES = [
+  "https://inv.nadeko.net",
+  "https://invidious.nerdvpn.de",
+  "https://invidious.jing.rocks",
+  "https://yt.cdaut.de",
+  "https://invidious.privacyredirect.com",
+];
+
 export type Track = {
   id: string;
   title: string;
@@ -35,13 +43,42 @@ function extractId(url?: string): string | null {
   return q ? q[1] : null;
 }
 
-async function searchPiped(q: string): Promise<Track[] | null> {
+// Calculate how many words from the query exist in the title/author
+function calculateRelevance(query: string, title: string, author: string): number {
+  const qWords = query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 1);
+  if (qWords.length === 0) return 1;
+
+  const target = `${title} ${author}`.toLowerCase();
+  let matchCount = 0;
+
+  for (const w of qWords) {
+    if (target.includes(w)) matchCount++;
+  }
+
+  return matchCount / qWords.length;
+}
+
+// Check if results are relevant enough. If the best result has < 30% word match, it's likely garbage.
+function areResultsRelevant(query: string, tracks: Track[]): boolean {
+  if (!tracks.length) return false;
+  const maxScore = Math.max(...tracks.map((t) => calculateRelevance(query, t.title, t.author)));
+  return maxScore >= 0.3;
+}
+
+function isValidDuration(duration: number): boolean {
+  // Skip tracks shorter than 30s or longer than 15 minutes (900s)
+  return duration >= 30 && duration <= 900;
+}
+
+async function searchPiped(q: string, filter: string = "music_songs"): Promise<Track[] | null> {
   for (const base of PIPED_INSTANCES) {
     try {
-      const res = await fetch(
-        `${base}/search?q=${encodeURIComponent(q)}&filter=music_songs`,
-        { signal: AbortSignal.timeout(6000) },
-      );
+      const res = await fetch(`${base}/search?q=${encodeURIComponent(q)}&filter=${filter}`, {
+        signal: AbortSignal.timeout(6000),
+      });
       if (!res.ok) continue;
       const data = (await res.json()) as { items?: PipedItem[] };
       const items = data.items ?? [];
@@ -50,13 +87,47 @@ async function searchPiped(q: string): Promise<Track[] | null> {
         if (it.type && it.type !== "stream") continue;
         const id = extractId(it.url);
         if (!id) continue;
+        const duration = it.duration ?? 0;
+        if (!isValidDuration(duration)) continue;
+
         tracks.push({
           id,
           title: it.title ?? "Unknown",
           author: it.uploaderName ?? "Unknown",
-          duration: it.duration ?? 0,
-          thumbnail:
-            it.thumbnail ?? `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+          duration,
+          thumbnail: it.thumbnail ?? `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+        });
+      }
+      if (tracks.length) return tracks;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+async function searchInvidious(q: string): Promise<Track[] | null> {
+  for (const base of INVIDIOUS_INSTANCES) {
+    try {
+      const res = await fetch(`${base}/api/v1/search?q=${encodeURIComponent(q)}&type=video`, {
+        signal: AbortSignal.timeout(6000),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (!Array.isArray(data)) continue;
+
+      const tracks: Track[] = [];
+      for (const it of data) {
+        if (!it.videoId) continue;
+        const duration = it.lengthSeconds ?? 0;
+        if (!isValidDuration(duration)) continue;
+
+        tracks.push({
+          id: it.videoId,
+          title: it.title ?? "Unknown",
+          author: it.author ?? "Unknown",
+          duration,
+          thumbnail: `https://i.ytimg.com/vi/${it.videoId}/hqdefault.jpg`,
         });
       }
       if (tracks.length) return tracks;
@@ -96,12 +167,9 @@ async function searchYouTubeScrape(q: string): Promise<Track[]> {
       const id = v.videoId;
       if (id && !seen.has(id)) {
         seen.add(id);
-        const title =
-          v.title?.runs?.[0]?.text ?? v.title?.simpleText ?? "Unknown";
+        const title = v.title?.runs?.[0]?.text ?? v.title?.simpleText ?? "Unknown";
         const author =
-          v.ownerText?.runs?.[0]?.text ??
-          v.longBylineText?.runs?.[0]?.text ??
-          "Unknown";
+          v.ownerText?.runs?.[0]?.text ?? v.longBylineText?.runs?.[0]?.text ?? "Unknown";
         const durText: string | undefined =
           v.lengthText?.simpleText ?? v.lengthText?.runs?.[0]?.text;
         let duration = 0;
@@ -111,13 +179,16 @@ async function searchYouTubeScrape(q: string): Promise<Track[]> {
             duration = parts.reduce((a, b) => a * 60 + b, 0);
           }
         }
-        tracks.push({
-          id,
-          title,
-          author,
-          duration,
-          thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-        });
+
+        if (isValidDuration(duration)) {
+          tracks.push({
+            id,
+            title,
+            author,
+            duration,
+            thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+          });
+        }
       }
     }
     if (Array.isArray(node)) {
@@ -138,8 +209,16 @@ export const searchTracksFn = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const q = data.query.trim();
     if (!q) return [] as Track[];
-    const piped = await searchPiped(q);
-    if (piped && piped.length) return piped;
+
+    // Strategy 1: Piped with music_songs filter
+    let results = await searchPiped(q, "music_songs");
+    if (results && areResultsRelevant(q, results)) return results;
+
+    // Strategy 2: Invidious search (good middle ground)
+    results = await searchInvidious(q);
+    if (results && areResultsRelevant(q, results)) return results;
+
+    // Strategy 3: YouTube Scrape (best for regional, but slower)
     try {
       return await searchYouTubeScrape(q);
     } catch (e) {

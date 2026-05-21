@@ -101,24 +101,22 @@ export const addTrackToPlaylistFn = createServerFn({ method: "POST" })
       .eq("playlist_id", data.playlist_id)
       .order("position", { ascending: false })
       .limit(1);
-    
+
     const nextPos = posData && posData.length > 0 ? posData[0].position + 1 : 0;
 
-    const { error } = await supabase
-      .from("playlist_tracks")
-      .insert({
-        playlist_id: data.playlist_id,
-        user_id: userId,
-        track_id: data.track.id,
-        title: data.track.title,
-        author: data.track.author,
-        thumbnail: data.track.thumbnail,
-        duration: data.track.duration,
-        position: nextPos,
-      });
+    const { error } = await supabase.from("playlist_tracks").insert({
+      playlist_id: data.playlist_id,
+      user_id: userId,
+      track_id: data.track.id,
+      title: data.track.title,
+      author: data.track.author,
+      thumbnail: data.track.thumbnail,
+      duration: data.track.duration,
+      position: nextPos,
+    });
 
     if (error) {
-      if (error.code === '23505') throw new Error("Track already in playlist");
+      if (error.code === "23505") throw new Error("Track already in playlist");
       throw new Error(error.message);
     }
     return { success: true };
@@ -169,7 +167,7 @@ export const reorderPlaylistFn = createServerFn({ method: "POST" })
         .update({ position: update.position })
         .eq("id", update.id)
         .eq("playlist_id", data.playlist_id)
-        .eq("user_id", userId)
+        .eq("user_id", userId),
     );
     await Promise.all(promises);
     return { success: true };

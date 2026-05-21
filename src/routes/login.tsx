@@ -135,7 +135,11 @@ function LoginPage() {
             className="w-full bg-input rounded-md px-3 py-2 text-sm"
           />
           {error && <div className="text-sm text-destructive text-center">{error}</div>}
-          {success && <div className="text-sm text-green-500 text-center font-medium bg-green-500/10 py-2 rounded-md border border-green-500/20">{success}</div>}
+          {success && (
+            <div className="text-sm text-green-500 text-center font-medium bg-green-500/10 py-2 rounded-md border border-green-500/20">
+              {success}
+            </div>
+          )}
           <button
             type="submit"
             disabled={loading || googleLoading}

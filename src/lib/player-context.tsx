@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import type { Track } from "@/lib/search";
 import { recordPlay } from "@/lib/library";
 
@@ -28,7 +36,8 @@ type PlayerCtx = {
 
 const Ctx = createContext<PlayerCtx | null>(null);
 
-const SILENT_WAV = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+const SILENT_WAV =
+  "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const [current, setCurrent] = useState<Track | null>(null);
@@ -42,9 +51,13 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const historyRef = useRef<Track[]>([]);
   const silentRef = useRef<HTMLAudioElement>(null);
 
-  // Keep a ref to current so callbacks always see the latest value
+  // Keep refs to avoid stale closures in callbacks
   const currentRef = useRef<Track | null>(null);
   currentRef.current = current;
+  const queueRef = useRef<Track[]>([]);
+  queueRef.current = queue;
+  const repeatModeRef = useRef<RepeatMode>("off");
+  repeatModeRef.current = repeatMode;
 
   // Synchronously play silent audio to unlock background JS thread on iOS
   const unlockAudio = useCallback(() => {
@@ -70,33 +83,38 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const seekTo = useCallback((n: number) => setSeekRequest(n), []);
 
-  const play = useCallback((track: Track, q: Track[] = []) => {
-    unlockAudio();
-    // Use the ref to get the current track (avoids stale closure)
-    const prev = currentRef.current;
-    if (prev) historyRef.current.push(prev);
+  const play = useCallback(
+    (track: Track, q: Track[] = []) => {
+      unlockAudio();
+      // Use the ref to get the current track (avoids stale closure)
+      const prev = currentRef.current;
+      if (prev) historyRef.current.push(prev);
 
-    // Reset playback state for new track
-    setCurrentTime(0);
-    setDuration(0);
-    setSeekRequest(null);
+      // Reset playback state for new track
+      setCurrentTime(0);
+      setDuration(0);
+      setSeekRequest(null);
 
-    setCurrent(track);
-    setQueue(q);
-    setIsPlaying(true);
-    recordPlay(track).catch(() => {});
-  }, [unlockAudio]);
+      setCurrent(track);
+      setQueue(q);
+      setIsPlaying(true);
+      recordPlay(track).catch(() => {});
+    },
+    [unlockAudio],
+  );
 
   const next = useCallback(() => {
     unlockAudio();
     const cur = currentRef.current;
-    if (repeatMode === "one" && cur) {
+    const currentQueue = queueRef.current;
+    const currentRepeatMode = repeatModeRef.current;
+    if (currentRepeatMode === "one" && cur) {
       setSeekRequest(0);
       setIsPlaying(true);
       return;
     }
-    if (!queue.length) {
-      if (repeatMode === "all" && historyRef.current.length > 0) {
+    if (!currentQueue.length) {
+      if (currentRepeatMode === "all" && historyRef.current.length > 0) {
         // loop back to first song in history
         const all = [...historyRef.current, cur!];
         historyRef.current = [];
@@ -112,7 +130,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       pauseUnlock();
       return;
     }
-    const [n, ...rest] = queue;
+    const [n, ...rest] = currentQueue;
     if (cur) historyRef.current.push(cur);
     setCurrent(n);
     setQueue(rest);
@@ -120,7 +138,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     setCurrentTime(0);
     setDuration(0);
     recordPlay(n).catch(() => {});
-  }, [queue, repeatMode, unlockAudio, pauseUnlock]);
+  }, [unlockAudio, pauseUnlock]);
 
   const prev = useCallback(() => {
     unlockAudio();
@@ -159,8 +177,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
       navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
       // Media session actions should ALSO trigger the audio unlock
-      navigator.mediaSession.setActionHandler("play", () => { unlockAudio(); setIsPlaying(true); });
-      navigator.mediaSession.setActionHandler("pause", () => { pauseUnlock(); setIsPlaying(false); });
+      navigator.mediaSession.setActionHandler("play", () => {
+        unlockAudio();
+        setIsPlaying(true);
+      });
+      navigator.mediaSession.setActionHandler("pause", () => {
+        pauseUnlock();
+        setIsPlaying(false);
+      });
       navigator.mediaSession.setActionHandler("nexttrack", () => next());
       navigator.mediaSession.setActionHandler("previoustrack", () => prev());
       navigator.mediaSession.setActionHandler("seekto", (d) => {
@@ -172,16 +196,34 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [current, isPlaying, next, prev, seekTo, unlockAudio, pauseUnlock]);
 
   const value: PlayerCtx = {
-    current, queue, mode, setMode, play, next, prev,
-    isPlaying, setIsPlaying, togglePlay,
-    repeatMode, setRepeatMode,
-    currentTime, setCurrentTime, duration, setDuration,
-    seekRequest, seekTo
+    current,
+    queue,
+    mode,
+    setMode,
+    play,
+    next,
+    prev,
+    isPlaying,
+    setIsPlaying,
+    togglePlay,
+    repeatMode,
+    setRepeatMode,
+    currentTime,
+    setCurrentTime,
+    duration,
+    setDuration,
+    seekRequest,
+    seekTo,
   };
 
   return (
     <Ctx.Provider value={value}>
-      <audio ref={silentRef} src={SILENT_WAV} loop playsInline className="hidden pointer-events-none" />
+      <audio
+        ref={silentRef}
+        src={SILENT_WAV}
+        playsInline
+        className="hidden pointer-events-none"
+      />
       {children}
     </Ctx.Provider>
   );

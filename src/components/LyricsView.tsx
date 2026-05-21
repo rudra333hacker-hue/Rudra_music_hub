@@ -44,20 +44,23 @@ export function LyricsView({ track, currentTime }: Props) {
 
   // Parse synced lyrics
   const parsedSynced = lyrics?.syncedLyrics
-    ? lyrics.syncedLyrics.split("\n").map(line => {
-        const match = line.match(/^\[(\d{2}):(\d{2}\.\d{2})\](.*)/);
-        if (!match) return null;
-        const time = parseInt(match[1]) * 60 + parseFloat(match[2]);
-        return { time, text: match[3].trim() };
-      }).filter((l): l is {time: number, text: string} => l !== null && l.text.length > 0)
+    ? lyrics.syncedLyrics
+        .split("\n")
+        .map((line) => {
+          const match = line.match(/^\[(\d{2}):(\d{2}\.\d{2})\](.*)/);
+          if (!match) return null;
+          const time = parseInt(match[1]) * 60 + parseFloat(match[2]);
+          return { time, text: match[3].trim() };
+        })
+        .filter((l): l is { time: number; text: string } => l !== null && l.text.length > 0)
     : null;
 
   // Auto-scroll synced lyrics
   useEffect(() => {
     if (!parsedSynced || !scrollRef.current) return;
-    
+
     // Find active line
-    const activeIndex = parsedSynced.findLastIndex(l => currentTime >= l.time - 0.5);
+    const activeIndex = parsedSynced.findLastIndex((l) => currentTime >= l.time - 0.5);
     if (activeIndex >= 0) {
       const el = scrollRef.current.children[activeIndex] as HTMLElement;
       if (el) {
@@ -67,34 +70,57 @@ export function LyricsView({ track, currentTime }: Props) {
   }, [currentTime, parsedSynced]);
 
   if (loading) {
-    return <div className="h-full flex items-center justify-center text-muted-foreground animate-pulse">Searching for lyrics...</div>;
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-4 text-muted-foreground">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+        <p className="animate-pulse font-medium">Searching multiple sources for lyrics...</p>
+      </div>
+    );
   }
 
   if (error || !lyrics) {
-    return <div className="h-full flex items-center justify-center text-muted-foreground">No lyrics found for this song.</div>;
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-2 text-muted-foreground px-6 text-center">
+        <p className="text-lg font-semibold">No lyrics found</p>
+        <p className="text-sm">We couldn't find lyrics for this song in our databases.</p>
+      </div>
+    );
   }
+
+  const attribution = (
+    <div className="text-xs text-muted-foreground/60 font-medium tracking-wider uppercase mt-8 mb-4 text-center">
+      Lyrics provided by {lyrics.source}
+    </div>
+  );
 
   if (parsedSynced) {
     return (
-      <div className="h-full overflow-y-auto pb-24 pt-12 space-y-6 px-4 no-scrollbar scroll-smooth" ref={scrollRef}>
+      <div
+        className="h-full overflow-y-auto pb-24 pt-12 space-y-6 px-4 no-scrollbar scroll-smooth relative"
+        ref={scrollRef}
+      >
         {parsedSynced.map((line, i) => {
-          const isActive = currentTime >= line.time - 0.5 && (i === parsedSynced.length - 1 || currentTime < parsedSynced[i + 1].time - 0.5);
+          const isActive =
+            currentTime >= line.time - 0.5 &&
+            (i === parsedSynced.length - 1 || currentTime < parsedSynced[i + 1].time - 0.5);
           return (
-            <p 
-              key={i} 
-              className={`text-2xl sm:text-3xl font-bold transition-all duration-300 ${isActive ? 'text-primary scale-105 origin-left' : 'text-muted-foreground/40 hover:text-muted-foreground/60'}`}
+            <p
+              key={i}
+              className={`text-2xl sm:text-3xl font-bold transition-all duration-300 ${isActive ? "text-primary scale-105 origin-left" : "text-muted-foreground/40 hover:text-muted-foreground/60"}`}
             >
               {line.text}
             </p>
           );
         })}
+        {attribution}
       </div>
     );
   }
 
   return (
-    <div className="h-full overflow-y-auto whitespace-pre-wrap text-xl sm:text-2xl font-bold text-foreground/80 leading-relaxed pb-24 pt-4 px-4 text-center">
+    <div className="h-full overflow-y-auto whitespace-pre-wrap text-xl sm:text-2xl font-bold text-foreground/80 leading-relaxed pb-24 pt-8 px-4 text-center">
       {lyrics.plainLyrics}
+      {attribution}
     </div>
   );
 }

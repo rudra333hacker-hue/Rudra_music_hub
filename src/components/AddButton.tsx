@@ -18,11 +18,7 @@ export function AddButton({ track }: { track: Track }) {
       >
         <Plus size={18} />
       </button>
-      <AddToPlaylistModal
-        track={track}
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-      />
+      <AddToPlaylistModal track={track} isOpen={modalOpen} onClose={() => setModalOpen(false)} />
     </>
   );
 }

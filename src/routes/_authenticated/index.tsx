@@ -8,8 +8,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { usePlayer } from "@/lib/player-context";
 import { LikeButton } from "@/components/LikeButton";
 
-export const Route = createFileRoute("/_authenticated/")(
-  {
+export const Route = createFileRoute("/_authenticated/")({
   component: HomePage,
   head: () => ({ meta: [{ title: "Home — Rudra Music Hub" }] }),
 });
@@ -37,7 +36,10 @@ function HomePage() {
 
   // Track if a mix load was cancelled
   const mixGenRef = useRef(0);
-  const lastMixReqRef = useRef<{ mode: "mix" | "mood" | "similar" | "genz", moodText?: string } | null>(null);
+  const lastMixReqRef = useRef<{
+    mode: "mix" | "mood" | "similar" | "genz";
+    moodText?: string;
+  } | null>(null);
 
   useEffect(() => {
     fetchHistory(12).then(setRecent);
@@ -53,7 +55,7 @@ function HomePage() {
     try {
       const raw = await getSuggestions({ data: { mode, mood: moodText } });
       if (gen !== mixGenRef.current) return; // cancelled
-      
+
       const suggestions = Array.isArray(raw) ? raw : [];
       if (!suggestions.length) {
         setMixErr("No suggestions returned. Try again.");
@@ -86,7 +88,9 @@ function HomePage() {
         // Show partial results progressively
         if (gen === mixGenRef.current) {
           setMix([...resolved]);
-          setMixProgress(`Resolved ${resolved.length} of ${Math.min(suggestions.length, 12)} tracks...`);
+          setMixProgress(
+            `Resolved ${resolved.length} of ${Math.min(suggestions.length, 12)} tracks...`,
+          );
         }
       }
 
@@ -121,12 +125,18 @@ function HomePage() {
   }
 
   return (
-    <div className="px-4 sm:px-6 lg:px-8 pt-6 pb-8 space-y-10 max-w-full overflow-x-hidden" style={{ background: "var(--gradient-hero)" }}>
+    <div
+      className="px-4 sm:px-6 lg:px-8 pt-6 pb-8 space-y-10 max-w-full overflow-x-hidden"
+      style={{ background: "var(--gradient-hero)" }}
+    >
       {/* Search */}
       <section>
         <form onSubmit={onSearch} className="flex gap-2 max-w-xl">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+              size={18}
+            />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -190,9 +200,27 @@ function HomePage() {
             <h2 className="text-xl font-bold">Made for you</h2>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={() => loadMix("mix")} disabled={mixLoading} className="text-xs sm:text-sm bg-secondary px-3 py-1.5 rounded-full hover:bg-accent disabled:opacity-50">Daily Mix</button>
-            <button onClick={() => loadMix("similar")} disabled={mixLoading} className="text-xs sm:text-sm bg-secondary px-3 py-1.5 rounded-full hover:bg-accent disabled:opacity-50">Similar</button>
-            <button onClick={() => loadMix("genz")} disabled={mixLoading} className="text-xs sm:text-sm bg-secondary px-3 py-1.5 rounded-full hover:bg-accent disabled:opacity-50">Gen-Z Mix</button>
+            <button
+              onClick={() => loadMix("mix")}
+              disabled={mixLoading}
+              className="text-xs sm:text-sm bg-secondary px-3 py-1.5 rounded-full hover:bg-accent disabled:opacity-50"
+            >
+              Daily Mix
+            </button>
+            <button
+              onClick={() => loadMix("similar")}
+              disabled={mixLoading}
+              className="text-xs sm:text-sm bg-secondary px-3 py-1.5 rounded-full hover:bg-accent disabled:opacity-50"
+            >
+              Similar
+            </button>
+            <button
+              onClick={() => loadMix("genz")}
+              disabled={mixLoading}
+              className="text-xs sm:text-sm bg-secondary px-3 py-1.5 rounded-full hover:bg-accent disabled:opacity-50"
+            >
+              Gen-Z Mix
+            </button>
           </div>
         </div>
         {mixErr && (
@@ -210,7 +238,9 @@ function HomePage() {
             </button>
           </div>
         )}
-        {mixLoading && <p className="text-sm text-muted-foreground">{mixProgress || "Curating with AI…"}</p>}
+        {mixLoading && (
+          <p className="text-sm text-muted-foreground">{mixProgress || "Curating with AI…"}</p>
+        )}
         {mix.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4">
             {mix.map((t, i) => (
@@ -219,7 +249,9 @@ function HomePage() {
           </div>
         )}
         {!mixLoading && mix.length === 0 && !mixErr && (
-          <p className="text-sm text-muted-foreground">Tap "Daily Mix" to get personalized AI picks based on your listening.</p>
+          <p className="text-sm text-muted-foreground">
+            Tap "Daily Mix" to get personalized AI picks based on your listening.
+          </p>
         )}
       </section>
 
@@ -243,9 +275,17 @@ import { AddButton } from "@/components/AddButton";
 function TrackCard({ t, onPlay }: { t: Track; onPlay: () => void }) {
   return (
     <div className="group relative min-w-0">
-      <button onClick={onPlay} className="w-full text-left bg-card hover:bg-accent transition rounded-lg p-2 sm:p-3 flex flex-col gap-2">
+      <button
+        onClick={onPlay}
+        className="w-full text-left bg-card hover:bg-accent transition rounded-lg p-2 sm:p-3 flex flex-col gap-2"
+      >
         <div className="relative aspect-square overflow-hidden rounded-md">
-          <img src={t.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition" />
+          <img
+            src={t.thumbnail}
+            alt=""
+            loading="lazy"
+            className="w-full h-full object-cover group-hover:scale-105 transition"
+          />
         </div>
         <div className="text-xs sm:text-sm font-medium line-clamp-2">{t.title}</div>
         <div className="text-[11px] sm:text-xs text-muted-foreground truncate">{t.author}</div>
@@ -261,14 +301,23 @@ function TrackCard({ t, onPlay }: { t: Track; onPlay: () => void }) {
 
 function TrackRow({ t, onPlay }: { t: Track; onPlay: () => void }) {
   return (
-    <div onClick={onPlay} className="group flex items-center gap-2 sm:gap-3 p-2 rounded-md hover:bg-accent cursor-pointer min-w-0">
-      <img src={t.thumbnail} alt="" className="w-10 h-10 sm:w-12 sm:h-12 rounded object-cover shrink-0" />
+    <div
+      onClick={onPlay}
+      className="group flex items-center gap-2 sm:gap-3 p-2 rounded-md hover:bg-accent cursor-pointer min-w-0"
+    >
+      <img
+        src={t.thumbnail}
+        alt=""
+        className="w-10 h-10 sm:w-12 sm:h-12 rounded object-cover shrink-0"
+      />
       <div className="flex-1 min-w-0">
         <div className="text-xs sm:text-sm font-medium truncate">{t.title}</div>
         <div className="text-[11px] sm:text-xs text-muted-foreground truncate">{t.author}</div>
       </div>
-      <span className="text-[11px] sm:text-xs text-muted-foreground shrink-0 hidden sm:block">{fmt(t.duration)}</span>
-      <div className="flex items-center shrink-0" onClick={e => e.stopPropagation()}>
+      <span className="text-[11px] sm:text-xs text-muted-foreground shrink-0 hidden sm:block">
+        {fmt(t.duration)}
+      </span>
+      <div className="flex items-center shrink-0" onClick={(e) => e.stopPropagation()}>
         <AddButton track={t} />
         <LikeButton track={t} />
       </div>

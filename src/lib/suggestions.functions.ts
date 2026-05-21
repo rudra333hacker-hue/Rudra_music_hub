@@ -50,7 +50,8 @@ async function callAI(systemPrompt: string, userPrompt: string): Promise<Suggest
     const body = await res.text().catch(() => "");
     console.error(`[Suggestions] Gemini API error ${res.status}: ${body}`);
     if (res.status === 429) throw new Error("AI rate limit reached. Please try again in a moment.");
-    if (res.status === 401 || res.status === 403) throw new Error("Gemini API key is invalid or missing permissions.");
+    if (res.status === 401 || res.status === 403)
+      throw new Error("Gemini API key is invalid or missing permissions.");
     throw new Error(`Gemini API error ${res.status}`);
   }
 
@@ -62,7 +63,7 @@ async function callAI(systemPrompt: string, userPrompt: string): Promise<Suggest
         .join("") ?? "";
     if (!text) return [];
     const parsed = JSON.parse(text);
-    
+
     // Robust extraction — handle various shapes
     let songs: any[] = [];
     if (Array.isArray(parsed?.songs)) {
@@ -70,10 +71,16 @@ async function callAI(systemPrompt: string, userPrompt: string): Promise<Suggest
     } else if (Array.isArray(parsed)) {
       songs = parsed;
     }
-    
+
     // Validate each entry has at minimum title and artist strings
     return songs
-      .filter((s: any) => typeof s?.title === "string" && s.title.trim() && typeof s?.artist === "string" && s.artist.trim())
+      .filter(
+        (s: any) =>
+          typeof s?.title === "string" &&
+          s.title.trim() &&
+          typeof s?.artist === "string" &&
+          s.artist.trim(),
+      )
       .slice(0, 20)
       .map((s: any) => ({ title: s.title.trim(), artist: s.artist.trim(), reason: s.reason }));
   } catch (e) {
@@ -207,17 +214,22 @@ export const getSuggestionsFn = createServerFn({ method: "POST" })
     const histArr = history ?? [];
     const likeArr = likes ?? [];
 
-    const histStr = histArr.map((r) => `- ${r.title} — ${r.author ?? ""}`).join("\n") || "(none yet)";
-    const likeStr = likeArr.map((r) => `- ${r.title} — ${r.author ?? ""}`).join("\n") || "(none yet)";
+    const histStr =
+      histArr.map((r) => `- ${r.title} — ${r.author ?? ""}`).join("\n") || "(none yet)";
+    const likeStr =
+      likeArr.map((r) => `- ${r.title} — ${r.author ?? ""}`).join("\n") || "(none yet)";
 
-    let system = "You are a music recommendation engine. Return 12 real song suggestions (title + artist) the user is likely to enjoy. Avoid duplicates of what they've already heard. Mix genres tastefully.";
+    let system =
+      "You are a music recommendation engine. Return 12 real song suggestions (title + artist) the user is likely to enjoy. Avoid duplicates of what they've already heard. Mix genres tastefully.";
     let user = `User listening history (most recent first):\n${histStr}\n\nLiked songs:\n${likeStr}\n\nReturn 12 fresh recommendations.`;
 
     if (data.mode === "mood" && data.mood) {
-      system = "You are a music DJ. Given a mood/vibe prompt, return 12 real songs that match. Use the user's taste below to bias picks.";
+      system =
+        "You are a music DJ. Given a mood/vibe prompt, return 12 real songs that match. Use the user's taste below to bias picks.";
       user = `Mood: "${data.mood}"\n\nUser taste:\nLikes:\n${likeStr}\nHistory:\n${histStr}\n\nReturn 12 songs.`;
     } else if (data.mode === "similar") {
-      system = "You are a music recommender. Suggest 12 songs sonically similar to the user's likes and recent plays.";
+      system =
+        "You are a music recommender. Suggest 12 songs sonically similar to the user's likes and recent plays.";
       user = `Likes:\n${likeStr}\nRecent:\n${histStr}\n\nReturn 12 similar songs.`;
     } else if (data.mode === "genz") {
       system =

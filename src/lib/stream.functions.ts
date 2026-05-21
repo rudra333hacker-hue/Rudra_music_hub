@@ -93,6 +93,48 @@ async function tryInvidious(videoId: string): Promise<string | null> {
   return null;
 }
 
+/**
+ * Try to get audio stream URL by scraping YouTube for title and searching JioSaavn.
+ * Returns direct MP4 audio stream which allows perfect background playback on mobile.
+ */
+async function tryJioSaavn(videoId: string): Promise<string | null> {
+  try {
+    const ytRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      signal: AbortSignal.timeout(6000),
+    });
+    const html = await ytRes.text();
+    const titleMatch = html.match(/<title>(.*?) - YouTube<\/title>/);
+    if (!titleMatch) return null;
+    const query = titleMatch[1].replace(/music video|official video|lyric video/gi, "").trim();
+
+    const searchUrl = `https://www.jiosaavn.com/api.php?__call=autocomplete.get&query=${encodeURIComponent(query)}&_format=json&_marker=0&ctx=web6dot0`;
+    const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(6000) });
+    const searchJson = await searchRes.json();
+    
+    if (searchJson.songs && searchJson.songs.data && searchJson.songs.data.length > 0) {
+      const songId = searchJson.songs.data[0].id;
+      
+      const detailUrl = `https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0%3F_marker%3D0&_format=json&pids=${songId}`;
+      const detailRes = await fetch(detailUrl, { signal: AbortSignal.timeout(6000) });
+      const detailJson = await detailRes.json();
+      const songData = detailJson[songId];
+      
+      if (songData && songData.media_preview_url) {
+        let streamUrl = songData.media_preview_url.replace("preview.saavncdn.com", "aac.saavncdn.com");
+        streamUrl = streamUrl.replace("_96_p.mp4", "_320.mp4").replace("_96_p", "_320");
+        return streamUrl as string;
+      }
+    }
+  } catch (e) {
+    console.error("JioSaavn fallback failed", e);
+  }
+  return null;
+}
+
 export const getAudioStreamFn = createServerFn({ method: "GET" })
   .inputValidator((data: unknown) => {
     const d = data as { videoId: string };
@@ -108,6 +150,10 @@ export const getAudioStreamFn = createServerFn({ method: "GET" })
     // Strategy 2: Invidious
     const invUrl = await tryInvidious(data.videoId);
     if (invUrl) return { url: invUrl };
+
+    // Strategy 3: JioSaavn Fallback (Very reliable for native audio/background play)
+    const saavnUrl = await tryJioSaavn(data.videoId);
+    if (saavnUrl) return { url: saavnUrl };
 
     throw new Error("Could not extract audio stream from any source");
   });

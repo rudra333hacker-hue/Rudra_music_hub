@@ -2,7 +2,9 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Track } from "./search";
 
 export async function recordPlay(t: Track) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return;
   await supabase.from("listening_history").insert({
     user_id: user.id,
@@ -14,7 +16,9 @@ export async function recordPlay(t: Track) {
 }
 
 export async function toggleLike(t: Track, liked: boolean) {
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) return;
   if (liked) {
     await supabase.from("liked_tracks").delete().eq("user_id", user.id).eq("track_id", t.id);

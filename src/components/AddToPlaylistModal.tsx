@@ -40,15 +40,24 @@ export function AddToPlaylistModal({ track, isOpen, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+    <div
+      className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-card border border-border rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in-95"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between p-4 border-b border-border">
           <h3 className="font-bold">Add to Playlist</h3>
-          <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground rounded-full hover:bg-secondary">
+          <button
+            onClick={onClose}
+            className="p-1 text-muted-foreground hover:text-foreground rounded-full hover:bg-secondary"
+          >
             <X size={20} />
           </button>
         </div>
-        
+
         <div className="p-4 flex items-center gap-3 bg-secondary/30">
           <img src={track.thumbnail} alt="" className="w-10 h-10 rounded object-cover" />
           <div className="flex-1 min-w-0">
@@ -59,28 +68,40 @@ export function AddToPlaylistModal({ track, isOpen, onClose }: Props) {
 
         <div className="max-h-64 overflow-y-auto p-2">
           {loading ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">Loading playlists...</div>
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              Loading playlists...
+            </div>
           ) : playlists.length === 0 ? (
             <div className="p-6 text-center">
               <ListMusic className="mx-auto mb-2 text-muted-foreground" size={32} />
-              <p className="text-sm text-muted-foreground mb-4">You don't have any playlists yet.</p>
-              <button onClick={onClose} className="text-xs text-primary font-medium hover:underline">
+              <p className="text-sm text-muted-foreground mb-4">
+                You don't have any playlists yet.
+              </p>
+              <button
+                onClick={onClose}
+                className="text-xs text-primary font-medium hover:underline"
+              >
                 Go to Library to create one
               </button>
             </div>
           ) : (
             <ul className="space-y-1">
-              {playlists.map(p => {
-                const isAlreadyIn = p.tracks.some(t => t.id === track.id);
+              {playlists.map((p) => {
+                const isAlreadyIn = p.tracks.some((t) => t.id === track.id);
                 return (
                   <li key={p.id}>
-                    <button 
+                    <button
                       onClick={() => handleAdd(p.id)}
                       disabled={addingTo !== null || isAlreadyIn}
                       className="w-full flex items-center justify-between p-3 rounded-md hover:bg-accent text-left disabled:opacity-50 transition"
                     >
                       <span className="font-medium text-sm truncate pr-4">
-                        {p.name} {isAlreadyIn && <span className="text-xs text-muted-foreground ml-2">(Already added)</span>}
+                        {p.name}{" "}
+                        {isAlreadyIn && (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            (Already added)
+                          </span>
+                        )}
                       </span>
                       {addingTo === p.id ? (
                         <span className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
@@ -94,7 +115,7 @@ export function AddToPlaylistModal({ track, isOpen, onClose }: Props) {
             </ul>
           )}
         </div>
-        
+
         {successMsg && (
           <div className="bg-primary text-primary-foreground text-center py-2 text-sm font-medium flex items-center justify-center gap-2">
             <Check size={16} /> {successMsg}

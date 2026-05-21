@@ -27,23 +27,30 @@ export default defineConfig(({ command }) => ({
         theme_color: "#0b0b0f",
         background_color: "#0b0b0f",
         display: "standalone",
-        icons: [
-          { src: "/logo.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
-        ],
+        icons: [{ src: "/logo.png", sizes: "512x512", type: "image/png", purpose: "any maskable" }],
       },
       workbox: {
-        // Cache the app shell for offline access
-        globPatterns: ["**/*.{js,css,html,ico,svg,png,webmanifest,json,txt,woff2}"],
-        // Navigate to the cached app shell when offline (prevents "offline" error page)
-        navigateFallback: "/index.html",
-        navigateFallbackDenylist: [
-          // Don't intercept API/server function calls
-          /^\/_server/,
-          /^\/api\//,
-        ],
+        // Cache only static assets (JS, CSS, images, fonts). NOT json (API responses).
+        globPatterns: ["**/*.{js,css,html,ico,svg,png,webmanifest,woff2}"],
         runtimeCaching: [
           {
-            // Cache YouTube thumbnails for offline display
+            // ⚠️ CRITICAL: TanStack Start server functions MUST always hit the network.
+            // Serving stale audio stream URLs = broken player. Never cache /_server.
+            urlPattern: ({ url }) => url.pathname.startsWith("/_server"),
+            handler: "NetworkOnly",
+          },
+          {
+            // Cache SSR page navigations with NetworkFirst (network first, cache fallback)
+            urlPattern: ({ request }) => request.mode === "navigate",
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "ssr-pages",
+              networkTimeoutSeconds: 5,
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            // Cache YouTube thumbnails — these are stable and safe to cache long-term
             urlPattern: ({ url }) => url.hostname === "i.ytimg.com",
             handler: "CacheFirst",
             options: {
@@ -56,43 +63,27 @@ export default defineConfig(({ command }) => ({
             },
           },
           {
-            // Cache Piped/Invidious audio streams for offline playback
+            // ⚠️ CRITICAL: Audio stream CDN URLs (googlevideo, pipedproxy) expire in minutes.
+            // NEVER cache these — always fetch fresh. Use NetworkOnly.
             urlPattern: ({ url }) =>
               url.hostname.includes("googlevideo.com") ||
               url.hostname.includes("pipedproxy") ||
               url.pathname.includes("/videoplayback"),
-            handler: "CacheFirst",
-            options: {
-              cacheName: "audio-streams",
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 7 * 24 * 60 * 60, // 7 days
-              },
-              cacheableResponse: { statuses: [0, 200, 206] },
-              rangeRequests: true,
-            },
+            handler: "NetworkOnly",
           },
           {
-            // Cache Piped/Invidious API responses with StaleWhileRevalidate
-            // so stream URLs can be resolved even when temporarily offline
+            // ⚠️ CRITICAL: Piped/Invidious /streams/ and /api/v1/videos/ return
+            // short-lived CDN URLs. Do NOT cache — serve stale = broken audio URLs.
             urlPattern: ({ url }) =>
               url.hostname.includes("pipedapi") ||
               url.hostname.includes("piped") ||
               url.hostname.includes("invidious") ||
               url.pathname.includes("/streams/") ||
               url.pathname.includes("/api/v1/videos/"),
-            handler: "StaleWhileRevalidate",
-            options: {
-              cacheName: "stream-api",
-              expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 24 * 60 * 60, // 24 hours
-              },
-              cacheableResponse: { statuses: [0, 200] },
-            },
+            handler: "NetworkOnly",
           },
           {
-            // Cache Google Fonts
+            // Cache Google Fonts — stable, safe to cache long-term
             urlPattern: ({ url }) =>
               url.hostname === "fonts.googleapis.com" || url.hostname === "fonts.gstatic.com",
             handler: "StaleWhileRevalidate",
@@ -106,7 +97,7 @@ export default defineConfig(({ command }) => ({
             },
           },
           {
-            // Don't cache YouTube iframe API or video embeds
+            // Never cache YouTube iframe API or embeds
             urlPattern: ({ url }) =>
               url.hostname === "www.youtube.com" || url.hostname === "youtube.com",
             handler: "NetworkOnly",
@@ -117,11 +108,11 @@ export default defineConfig(({ command }) => ({
   ],
   server: {
     port: 8080,
-    host: "::"
+    host: "::",
   },
   resolve: {
     alias: {
-      "@": `${process.cwd()}/src`
+      "@": `${process.cwd()}/src`,
     },
     dedupe: [
       "react",
@@ -129,7 +120,7 @@ export default defineConfig(({ command }) => ({
       "react/jsx-runtime",
       "react/jsx-dev-runtime",
       "@tanstack/react-query",
-      "@tanstack/query-core"
-    ]
-  }
+      "@tanstack/query-core",
+    ],
+  },
 }));
