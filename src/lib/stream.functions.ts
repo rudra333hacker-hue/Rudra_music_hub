@@ -1,14 +1,20 @@
+import ytdl from "@distube/ytdl-core";
 import { createServerFn } from "@tanstack/react-start";
 
 // Piped instances — curated list of currently reliable ones
 const PIPED_INSTANCES = [
   "https://pipedapi.kavin.rocks",
-  "https://pipedapi.r4fo.com",
   "https://pipedapi.adminforge.de",
+  "https://pipedapi.r4fo.com",
   "https://pipedapi.leptons.xyz",
   "https://api.piped.private.coffee",
   "https://pipedapi.drgns.space",
   "https://pipedapi.ducks.party",
+  "https://pipedapi.smnz.de",
+  "https://pipedapi.tokhmi.xyz",
+  "https://pipedapi.lunar.icu",
+  "https://piped-api.lunar.icu",
+  "https://pipedapi.frontendfriendly.xyz"
 ];
 
 // Invidious instances as a secondary fallback (different API format)
@@ -18,6 +24,10 @@ const INVIDIOUS_INSTANCES = [
   "https://invidious.jing.rocks",
   "https://yt.cdaut.de",
   "https://invidious.privacyredirect.com",
+  "https://inv.thepixora.com",
+  "https://yt.chocolatemoo53.com",
+  "https://invidious.f5.si",
+  "https://invidious.tiekoetter.com"
 ];
 
 /**
@@ -154,6 +164,17 @@ export const getAudioStreamFn = createServerFn({ method: "GET" })
     // Strategy 3: JioSaavn Fallback (Very reliable for native audio/background play)
     const saavnUrl = await tryJioSaavn(data.videoId);
     if (saavnUrl) return { url: saavnUrl };
+
+    // Strategy 4: ytdl-core direct extraction fallback
+    try {
+      const info = await ytdl.getInfo(data.videoId);
+      const format = ytdl.chooseFormat(info.formats, { quality: 'highestaudio' });
+      if (format && format.url) {
+        return { url: format.url };
+      }
+    } catch (e) {
+      console.error("ytdl-core fallback failed", e);
+    }
 
     throw new Error("Could not extract audio stream from any source");
   });
