@@ -36,8 +36,22 @@ export default defineConfig(({ command }) => ({
           {
             // ⚠️ CRITICAL: TanStack Start server functions MUST always hit the network.
             // Serving stale audio stream URLs = broken player. Never cache /_server.
-            urlPattern: ({ url }) => url.pathname.startsWith("/_server"),
+            urlPattern: ({ url }) => url.pathname.startsWith("/_server") && url.search.includes("getAudioStreamFn"),
             handler: "NetworkOnly",
+          },
+          {
+            // Cache other server functions (like search, lyrics, suggestions) for offline use
+            urlPattern: ({ url }) => url.pathname.startsWith("/_server") && !url.search.includes("getAudioStreamFn"),
+            handler: "NetworkFirst",
+            options: {
+              cacheName: "api-cache",
+              networkTimeoutSeconds: 3,
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 24 * 60 * 60, // 1 day
+              },
+              cacheableResponse: { statuses: [0, 200] },
+            },
           },
           {
             // Cache SSR page navigations with NetworkFirst (network first, cache fallback)
